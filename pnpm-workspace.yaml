@@ -6,4 +6,6 @@ packages:
 # telemetry setup, and protobufjs only rebuilds a descriptor cache it ships.
 allowBuilds:
   '@google/genai': false
+  # esbuild's postinstall resolves its platform binary; vitest needs it.
+  esbuild: true
   protobufjs: false

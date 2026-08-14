@@ -48,35 +48,57 @@ export function reconcile(
   options: ReconcileOptions = {},
 ): ReconcileResult {
   const held = options.localHeldIds;
-  const localIndex = new Map<string, number>();
-  for (let i = 0; i < local.length; i++) {
-    const el = local[i];
-    if (el) localIndex.set(el.id, i);
+
+  // Keyed by id, with a separate id list for ordering.
+  //
+  // An index-into-the-array formulation is the tempting one and it is wrong:
+  // when a batch contains two updates to the same *new* id, the second lookup
+  // finds an index that has been reserved but not yet written, so the write
+  // lands past the end of the array. The result is a sparse array and a
+  // duplicated element — which is exactly what a chunked delta or a large paste
+  // produces in practice.
+  const byId = new Map<string, SyncElement>();
+  const order: string[] = [];
+  for (const el of local) {
+    if (!byId.has(el.id)) order.push(el.id);
+    byId.set(el.id, el);
   }
 
-  const out = local.slice();
   const changed: string[] = [];
-  const appended: SyncElement[] = [];
+  const seen = new Set<string>();
 
   for (const incoming of remote) {
-    const at = localIndex.get(incoming.id);
-    if (at === undefined) {
-      // Never seen. A tombstone for an element we don't have is a no-op.
-      if (incoming.isDeleted) continue;
-      localIndex.set(incoming.id, out.length + appended.length);
-      appended.push(incoming);
-      changed.push(incoming.id);
-      continue;
-    }
-    const current = out[at];
+    // Held elements are mid-gesture locally; a remote echo must not yank them.
     if (held?.has(incoming.id)) continue;
+
+    const current = byId.get(incoming.id);
     if (!remoteWins(current, incoming)) continue;
-    out[at] = incoming;
-    changed.push(incoming.id);
+
+    // Never seen — take it, *including* tombstones.
+    //
+    // Dropping a tombstone for an unknown element looks like an obvious
+    // optimisation and destroys convergence. A delete can legitimately arrive
+    // before the element it deletes: a peer that loaded a snapshot after the
+    // delete, then received a stale broadcast of the element from a peer who had
+    // not processed the delete yet, would resurrect it and never hear about the
+    // deletion again. Keeping the tombstone is what makes the merge commutative,
+    // and commutativity is the whole basis of every peer agreeing.
+    //
+    // The memory cost is bounded by pruneTombstones().
+    if (current === undefined) order.push(incoming.id);
+
+    byId.set(incoming.id, incoming);
+    if (!seen.has(incoming.id)) {
+      seen.add(incoming.id);
+      changed.push(incoming.id);
+    }
   }
 
-  if (appended.length > 0) out.push(...appended);
-  return { elements: out, changed };
+  // Unchanged: hand back the original array so callers can compare by identity
+  // and skip a repaint. Treated as immutable by every caller.
+  if (changed.length === 0) return { elements: local as SyncElement[], changed };
+
+  return { elements: order.map((id) => byId.get(id) as SyncElement), changed };
 }
 
 /**
