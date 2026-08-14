@@ -1,0 +1,10 @@
+# opencv-contrib gives us ximgproc.thinning (Zhang-Suen skeletonisation), which
+# the base opencv-python wheel does not ship. Headless because Render has no
+# display and the GUI build drags in GTK.
+opencv-contrib-python-headless==4.10.0.84
+numpy==1.26.4
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-multipart==0.0.20
+Pillow==11.1.0
