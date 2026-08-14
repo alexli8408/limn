@@ -73,6 +73,25 @@ Your project ref is in the dashboard URL:
 `supabase.com/dashboard/project/`**`abcdefghijklmnop`**. `db push` will ask for
 the database password from 2a.
 
+**If `db push` fails with `Connection terminated unexpectedly`,** use the pooler
+instead:
+
+```bash
+./scripts/db.sh push
+```
+
+`db push` connects to `db.<ref>.supabase.co`, which resolves only over IPv6 —
+IPv4 on that host is a paid add-on. Any network that can't carry IPv6 to it
+fails with a message that reads like an auth or provisioning problem and is
+neither. It is especially likely behind a fake-IP proxy (Clash, Shadowrocket,
+sing-box), where every hostname resolves to a synthetic `198.18.x.x` address and
+only proxied protocols reach anywhere — a plain port check still looks healthy,
+because TCP completes against the local proxy.
+
+`scripts/db.sh` routes the same command through the connection pooler, which is
+reachable over IPv4. `supabase link` already cached the pooler URL; the script
+just supplies the password. Use it for every later migration too.
+
 It should apply five migrations in order:
 
 ```

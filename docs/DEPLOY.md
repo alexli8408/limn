@@ -173,6 +173,12 @@ seconds would write ~900 revisions an hour.
 
 ## Troubleshooting
 
+**`supabase db push` fails with `Connection terminated unexpectedly`.** Not auth,
+and not provisioning. The direct host `db.<ref>.supabase.co` is IPv6-only; use
+`./scripts/db.sh push`, which routes through the IPv4 pooler. Common on networks
+without IPv6 and on fake-IP proxies, where a port check still succeeds against
+the local proxy and so proves nothing.
+
 **Subscribing fails with a policy error.** The `realtime.messages` policies did
 not apply, or Realtime authorization is off in the dashboard. Check
 `supabase/migrations/*_rls.sql` ran and that the client passes
