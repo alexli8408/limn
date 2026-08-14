@@ -11,6 +11,27 @@ insert into auth.users (id, email, raw_user_meta_data) values
 \echo '--- profiles auto-created by trigger (expect 3)'
 select count(*) as profiles from public.profiles;
 
+-- An anonymous sign-in has a null email. split_part('', '@', 1) returns an empty
+-- string rather than null, so a coalesce chain ending in 'Guest' silently
+-- returns '' instead — every guest ends up nameless.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('44444444-4444-4444-4444-444444444444', null, '{}'::jsonb,
+        '{"provider":"anonymous"}'::jsonb);
+
+\echo '--- an anonymous user must be named Guest, not left blank'
+select display_name, is_guest from public.profiles
+where id = '44444444-4444-4444-4444-444444444444';
+
+do $$
+declare v_name text;
+begin
+  select display_name into v_name from public.profiles
+  where id = '44444444-4444-4444-4444-444444444444';
+  if coalesce(btrim(v_name), '') = '' then
+    raise notice 'UNEXPECTED: anonymous user got an empty display_name';
+  end if;
+end $$;
+
 set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
 set role authenticated;
 
