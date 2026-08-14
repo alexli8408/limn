@@ -35,8 +35,12 @@ export default function RemoteCursors({ cursors, api }: Props) {
   if (!api || cursors.size === 0) return null;
   const appState = api.getAppState();
 
+  // z-index 3 is not arbitrary. Excalidraw stacks its static canvas at 1 and its
+  // interactive canvas at 2, and both are opaque, so an overlay left at the
+  // default `auto` paints underneath them and is never seen. Its own UI layer
+  // sits at 4, which cursors should stay below so they cannot cover the toolbar.
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div className="pointer-events-none absolute inset-0 z-[3] overflow-hidden">
       {[...cursors.values()].map((cursor) => {
         const { x, y } = sceneCoordsToViewportCoords(
           { sceneX: cursor.x, sceneY: cursor.y },
