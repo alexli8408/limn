@@ -182,7 +182,7 @@ export default function AiPanel(props: Props) {
             onChange={(event) => setQuality(event.target.checked ? "high" : "fast")}
             className="h-3 w-3"
           />
-          Higher quality (slower, uses the Pro model)
+          Higher quality (slower, uses a stronger model)
         </label>
 
         {props.run && (

@@ -249,6 +249,30 @@ close to even.
 That last qualifier matters: forcing uniform spacing on a deliberately clustered
 layout destroys grouping the user meant to express.
 
+### Choosing the model
+
+Picked by measurement, not by version number. `scripts/bench-gemini.py` runs the
+app's real prompts, schema and fixtures three times per model and scores the
+three behaviours that matter: declining a drawing, accepting a flowchart, and
+generating a diagram from text.
+
+| model | correct | median latency | errors |
+|---|---|---|---|
+| gemini-3.6-flash | 9/9 | 8313 ms | none |
+| gemini-3.1-flash-lite | 9/9 | 4932 ms | none |
+| gemini-3.5-flash | 8/9 | 6419 ms | one 429 |
+| gemini-3.7-flash | 4/9 | 7483 ms | five 503s |
+
+Two things this caught that reasoning would not have. The newest model is not
+the best one: 3.7 is so oversubscribed that most calls return 503. And the
+alias `gemini-flash-latest` inherits exactly that problem, since it tracks
+whatever is newest, so the models are pinned instead.
+
+`GEMINI_MODEL_PRO` stays pointed at `gemini-pro-latest` even though Pro returns
+429 on the free tier, because the client falls back to the base model on 429.
+That costs one wasted round trip on a free key and upgrades for nothing on a
+paid one. The panel reports which model actually answered.
+
 ### Layout is not the model's job
 
 `layout.ts` is a compact Sugiyama pipeline: break cycles by reversing DFS back

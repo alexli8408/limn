@@ -34,8 +34,8 @@ export function serverEnv() {
   }
   return {
     geminiApiKey: process.env.GEMINI_API_KEY ?? "",
-    geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
-    geminiModelPro: process.env.GEMINI_MODEL_PRO ?? "gemini-3.6-flash",
+    geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
+    geminiModelPro: process.env.GEMINI_MODEL_PRO ?? "gemini-pro-latest",
     visionUrl: process.env.VISION_SERVICE_URL ?? "http://localhost:8000",
     visionApiKey: process.env.VISION_API_KEY ?? "",
   } as const;

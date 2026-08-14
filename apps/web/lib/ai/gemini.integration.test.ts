@@ -84,8 +84,8 @@ test.skipIf(!hasKey)("generates a well-formed diagram from a prompt", async () =
 test.skipIf(!hasKey)("the configured models are actually reachable", async () => {
   const key = process.env.GEMINI_API_KEY as string;
   const configured = [
-    process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
-    process.env.GEMINI_MODEL_PRO ?? "gemini-3.6-flash",
+    process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
+    process.env.GEMINI_MODEL_PRO ?? "gemini-pro-latest",
   ];
 
   const response = await fetch(

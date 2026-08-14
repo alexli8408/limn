@@ -117,8 +117,8 @@ Environment variables (Production and Preview):
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from Supabase → Settings → API |
 | `NEXT_PUBLIC_SITE_URL` | your deployment origin, e.g. `https://limn.vercel.app` |
 | `GEMINI_API_KEY` | from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| `GEMINI_MODEL` | `gemini-3.5-flash` |
-| `GEMINI_MODEL_PRO` | `gemini-3.6-flash` |
+| `GEMINI_MODEL` | `gemini-3.6-flash` |
+| `GEMINI_MODEL_PRO` | `gemini-pro-latest` |
 | `VISION_SERVICE_URL` | your Render URL, no trailing slash |
 | `VISION_API_KEY` | the value Render generated |
 
