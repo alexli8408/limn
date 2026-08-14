@@ -11,9 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # No `version:` here on purpose. The action errors out if a version is
+      # given both here and as `packageManager` in package.json, and
+      # packageManager is the better single source of truth — it also pins the
+      # version local installs use.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,9 +53,13 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: apps/vision/requirements.txt
+      # Deliberately not --no-cache-dir, unlike render.yaml: `cache: pip` above
+      # needs pip to actually populate ~/.cache/pip, or the post-job cache save
+      # fails the whole job even though every test passed. Caching the ~60 MB
+      # OpenCV wheel is worth having in CI; in a Render build container it is not.
       - working-directory: apps/vision
         run: |
-          pip install --no-cache-dir -r requirements.txt pytest==8.3.4 httpx==0.28.1
+          pip install -r requirements.txt pytest==8.3.4 httpx==0.28.1
           python -m pytest tests -q
 
   database:

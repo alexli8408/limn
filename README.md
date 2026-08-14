@@ -120,7 +120,7 @@ pnpm install
 cp .env.example .env && cp .env.example apps/web/.env.local   # then fill both in
 
 # database
-supabase link --project-ref <ref> && supabase db push
+supabase init && supabase link --project-ref <ref> && supabase db push
 
 # vision service
 cd apps/vision && python3.11 -m venv .venv
@@ -129,9 +129,10 @@ cd apps/vision && python3.11 -m venv .venv
 pnpm dev        # web :3000, vision :8000
 ```
 
-In the Supabase dashboard, enable **Authentication → Providers → Anonymous
-sign-ins** (the one-click onboarding path) and **Realtime authorization** for
-private channels.
+In the Supabase dashboard, enable **Authentication → Sign In / Providers →
+Anonymous sign-ins**. That is the one dashboard toggle that matters — it is the
+entire onboarding path. Realtime private channels need no toggle; the migrations
+install the `realtime.messages` policies that authorize them.
 
 Step-by-step from nothing — including which dashboard toggles matter and a smoke
 test that isolates each subsystem — is in [docs/SETUP.md](docs/SETUP.md).
