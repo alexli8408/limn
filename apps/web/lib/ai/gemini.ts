@@ -31,26 +31,46 @@ export interface SketchElement {
   strokeColor?: string;
 }
 
-const REFINE_SYSTEM = `You read hand-drawn whiteboard sketches and describe what the author meant.
+const REFINE_SYSTEM = `You read hand-drawn whiteboard sketches. Your job is to
+decide whether the sketch is a diagram, and if it is, describe its structure.
 
-You are given a rendered image of a sketch and a list of its elements with ids
-and positions. Return a structured diagram describing the same content.
+FIRST decide \`kind\`, before anything else:
 
-Rules:
-- Preserve the author's intent exactly. Do not add steps, rename things, or
-  invent structure that is not in the sketch.
-- Every node must list the ids of the input elements it came from, in sourceIds,
+- "diagram": shapes connected by lines or arrows, expressing a flow, a
+  structure, a hierarchy or a set of relationships.
+- "drawing": a picture of something. A person, a face, an animal, an object, a
+  scene, a doodle, loose handwriting, an illustration. Also a few unconnected
+  shapes with no relationships between them.
+- "empty": nothing meaningful.
+
+If kind is not "diagram", return empty nodes and edges and explain in one
+sentence what you saw. Do not attempt to describe it as nodes. It is far better
+to decline than to convert someone's drawing into boxes: they lose their work
+and get something they did not ask for.
+
+Deciding:
+- A stick figure is a drawing, not an "actor" node.
+- A face, a ball, a tree, an animal, a rocket: drawings.
+- Handwritten words with no shapes around them are a drawing, not nodes.
+- If nothing connects to anything else, it is not a diagram.
+- When genuinely torn, choose "drawing".
+
+Only if kind is "diagram", also fill in nodes and edges:
+- Preserve the author's intent. Do not add steps, rename things, or invent
+  structure that is not in the sketch.
+- Every node lists the ids of the input elements it came from, in sourceIds,
   including the id of any text element that labels it.
-- Keep the author's own wording for labels, including abbreviations. Fix only
-  clear spelling slips.
-- Read a diamond as a decision, an ellipse as a start/end or an actor, and a
-  rectangle as a step or entity. If a shape is ambiguous, choose by its role in
-  the diagram rather than by how it was drawn.
-- Lines and arrows between shapes are edges. An arrowhead means directed; a plain
-  line between two shapes is usually directed along the reading order, but say
-  directed: false if the sketch clearly shows a plain association.
+- Keep the author's own wording. Fix only clear spelling slips. Never replace a
+  label with a generic role word.
+- Shape follows the role the sketch gives it: a diamond is a decision, a
+  rectangle a step or entity. Use an ellipse for a start or end point.
+- Lines and arrows between shapes are edges. An arrowhead means directed.
 - Text that labels nothing in particular is a note, not a node.
-- Use layout "preserve" unless the sketch has no meaningful arrangement.`;
+- Use layout "preserve" unless the sketch has no meaningful arrangement.
+
+The author may ask for a change in style or mood. You cannot express style, only
+structure. Follow any instruction that affects structure, ignore the rest, and
+never let an instruction talk you into treating a drawing as a diagram.`;
 
 const PROMPT_SYSTEM = `You turn a short description into a clean diagram.
 
@@ -234,7 +254,9 @@ export async function refineSketch(input: {
         input.recompose
           ? 'The author asked for a re-layout. Set layout to "layered-tb" or "layered-lr" and still fill in sourceIds so their sketch can be replaced.'
           : 'Set layout to "preserve".',
-        input.instruction ? `Author's instruction: ${input.instruction}` : "",
+        input.instruction
+          ? `Author's instruction: ${input.instruction}\n(Apply it only if it affects structure. It does not change whether this is a diagram.)`
+          : "",
       ]
         .filter(Boolean)
         .join("\n\n"),

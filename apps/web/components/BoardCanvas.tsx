@@ -198,6 +198,24 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           throw new Error("error" in payload ? payload.error : "generation failed");
         }
 
+        // A sketch that is not a diagram is left completely alone. Converting a
+        // drawing into boxes loses the author's work and gives them something
+        // they did not ask for, which is worse than doing nothing.
+        if (payload.diagram.kind !== "diagram") {
+          setAiRun({
+            state: "declined",
+            message:
+              payload.diagram.rationale ||
+              "That looks like a drawing rather than a diagram, so nothing was changed.",
+            hint:
+              payload.diagram.kind === "empty"
+                ? "Draw some shapes and connect them with arrows, then try again."
+                : "Beautify redraws diagrams: boxes and arrows. For a drawing, the Snap toggle in the header cleans up strokes as you draw.",
+          });
+          collab.announceAi("done", mode, props.displayName);
+          return;
+        }
+
         const bounds = boundsOf(target);
         const compiled = compileDiagram(payload.diagram, {
           existing: all,

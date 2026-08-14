@@ -14,6 +14,16 @@ import { z } from "zod";
  * the part it is bad at (bookkeeping).
  */
 
+/**
+ * What the sketch actually is.
+ *
+ * Without this the model has no way to refuse. Given a drawing it will map it
+ * onto the only vocabulary it has, which is how a stick figure and the word
+ * "ball" came back as two ellipses labelled "ball" and "actor". The tool
+ * destroyed the sketch to fit its own IR.
+ */
+export const sketchKinds = ["diagram", "drawing", "empty"] as const;
+
 export const nodeShapes = ["rectangle", "ellipse", "diamond"] as const;
 export const emphases = ["normal", "accent", "muted", "success", "danger"] as const;
 export const layouts = ["preserve", "layered-tb", "layered-lr", "grid"] as const;
@@ -44,6 +54,7 @@ export const diagramEdgeSchema = z.object({
 });
 
 export const diagramSchema = z.object({
+  kind: z.enum(sketchKinds).default("diagram"),
   title: z.string().max(120).default(""),
   layout: z.enum(layouts).default("preserve"),
   nodes: z.array(diagramNodeSchema).max(120).default([]),
@@ -78,6 +89,12 @@ export type LimnDiagram = z.infer<typeof diagramSchema>;
 export const geminiDiagramSchema = {
   type: "object",
   properties: {
+    kind: {
+      type: "string",
+      enum: [...sketchKinds],
+      description:
+        "'diagram' when the sketch is boxes/shapes connected by lines or arrows. 'drawing' when it is a picture of something (a person, an object, a scene, a doodle, handwriting) rather than a node-and-edge structure. 'empty' when there is nothing meaningful. Choose 'drawing' whenever you are unsure: returning nodes for a picture destroys the author's work.",
+    },
     title: { type: "string", description: "Short title for the diagram." },
     layout: {
       type: "string",
@@ -143,8 +160,8 @@ export const geminiDiagramSchema = {
       description: "One sentence on what you changed and why.",
     },
   },
-  required: ["layout", "nodes", "edges", "rationale"],
-  propertyOrdering: ["title", "layout", "nodes", "edges", "notes", "rationale"],
+  required: ["kind", "layout", "nodes", "edges", "rationale"],
+  propertyOrdering: ["kind", "title", "layout", "nodes", "edges", "notes", "rationale"],
 } as const;
 
 /**
@@ -161,6 +178,18 @@ export function parseDiagram(raw: unknown): {
   const diagram = diagramSchema.parse(raw);
   const known = new Set(diagram.nodes.map((n) => n.id));
   const reason: string[] = [];
+
+  // A declined sketch must carry nothing through. A model that says "drawing"
+  // and still emits nodes would otherwise have those applied anyway.
+  if (diagram.kind !== "diagram") {
+    return {
+      diagram: { ...diagram, nodes: [], edges: [], notes: [] },
+      dropped: {
+        edges: diagram.edges.length,
+        reason: [`sketch classified as "${diagram.kind}"`],
+      },
+    };
+  }
 
   const edges = diagram.edges.filter((edge) => {
     if (!known.has(edge.from)) {

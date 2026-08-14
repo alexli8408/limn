@@ -3,8 +3,10 @@
 import { useRef, useState } from "react";
 
 export interface AiRun {
-  state: "running" | "done" | "error";
+  state: "running" | "done" | "error" | "declined";
   message: string;
+  /** Shown under a decline, telling the user what would work instead. */
+  hint?: string;
   stats?: {
     nodes: number;
     edges: number;
@@ -190,7 +192,9 @@ export default function AiPanel(props: Props) {
                 ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
                 : props.run.state === "running"
                   ? "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
-                  : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  : props.run.state === "declined"
+                    ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                    : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
             }`}
           >
             <div className="flex items-start gap-2">
@@ -206,6 +210,9 @@ export default function AiPanel(props: Props) {
                 </button>
               )}
             </div>
+            {props.run.hint && (
+              <p className="mt-1.5 leading-relaxed opacity-80">{props.run.hint}</p>
+            )}
             {props.run.stats && (
               <div className="mt-1.5 font-mono text-[10px] opacity-70">
                 {props.run.stats.nodes} nodes · {props.run.stats.edges} edges
