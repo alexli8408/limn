@@ -150,9 +150,16 @@ def require_key(x_limn_key: Annotated[str | None, Header()] = None) -> None:
 Guard = Annotated[None, Depends(require_key)]
 
 
-@app.get("/health", response_model=HealthResponse)
+@app.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Unauthenticated on purpose, this is UptimeRobot's keepalive target."""
+    """Unauthenticated on purpose, this is UptimeRobot's keepalive target.
+
+    HEAD as well as GET. Starlette adds HEAD to any GET route automatically, but
+    FastAPI's @app.get does not, so uptime checkers that probe with HEAD (which
+    UptimeRobot does by default) were getting 405 and reading the service as
+    down. It fell back to GET so the keepalive still worked, but the monitor was
+    logging a failure on every cycle.
+    """
     return HealthResponse(
         status="ok",
         service="limn-vision",
