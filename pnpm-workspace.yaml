@@ -2,3 +2,8 @@ packages:
   - "apps/web"
   - "packages/*"
   - "scripts"
+# Neither needs a postinstall for our use: @google/genai's script is optional
+# telemetry setup, and protobufjs only rebuilds a descriptor cache it ships.
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false
