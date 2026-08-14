@@ -21,7 +21,7 @@ const BoardCanvas = dynamic(() => import("./BoardCanvas"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center">
-      <span className="text-sm text-neutral-500">Opening board…</span>
+      <span className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--ink-faint)]">Opening board…</span>
     </div>
   ),
 });

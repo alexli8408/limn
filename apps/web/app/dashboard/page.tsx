@@ -25,14 +25,14 @@ export default async function DashboardPage() {
     .maybeSingle();
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12">
+    <main className="mx-auto max-w-4xl px-6 py-14">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <Link href="/" className="font-mono text-sm text-neutral-400">
+          <Link href="/" className="font-mono text-sm font-bold uppercase tracking-[0.14em] text-[var(--ink-faint)] transition hover:text-[var(--ink-accent)]">
             limn
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your boards</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h1 className="mt-2 text-3xl font-bold tracking-[-0.03em] text-[var(--ink-text)]">Your boards</h1>
+          <p className="mt-1.5 text-sm text-[var(--ink-dim)]">
             {profile?.is_guest
               ? "You are signed in as a guest. Boards stay in this browser session."
               : `Signed in as ${profile?.display_name ?? "you"}.`}
@@ -42,7 +42,7 @@ export default async function DashboardPage() {
         <form action={startDrawing}>
           <button
             type="submit"
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+            className="rounded-sm bg-[var(--ink-accent)] px-4 py-2 text-sm font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
           >
             New board
           </button>
@@ -50,7 +50,7 @@ export default async function DashboardPage() {
       </div>
 
       {!boards || boards.length === 0 ? (
-        <p className="mt-12 rounded-lg border border-dashed border-neutral-300 p-10 text-center text-sm text-neutral-500 dark:border-neutral-700">
+        <p className="mt-12 border border-dashed border-[var(--ink-line)] p-12 text-center text-sm text-[var(--ink-faint)]">
           No boards yet. Create one and start sketching.
         </p>
       ) : (
@@ -59,17 +59,17 @@ export default async function DashboardPage() {
             <li key={board.id}>
               <Link
                 href={`/board/${board.id}`}
-                className="block rounded-lg border border-neutral-200 p-4 transition hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
+                className="block border border-[var(--ink-line)] bg-[var(--ink-surface)] p-4 transition hover:border-[var(--ink-accent)]"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="truncate font-medium">{board.title}</span>
                   {board.owner_id !== auth.user.id && (
-                    <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800">
+                    <span className="shrink-0 border border-[var(--ink-line)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
                       shared
                     </span>
                   )}
                 </div>
-                <p className="mt-1 font-mono text-xs text-neutral-400">
+                <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
                   {board.element_count} elements ·{" "}
                   {new Date(board.updated_at).toLocaleDateString()}
                 </p>

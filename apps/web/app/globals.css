@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./theme.css";
 @import "./landing.css";
 
 :root {
@@ -11,7 +12,9 @@ body {
 }
 
 body {
-  @apply bg-white text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
+  background: var(--ink-void);
+  color: var(--ink-text);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Excalidraw ships its own theming; keep the host page from fighting it. */

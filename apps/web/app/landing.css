@@ -1,59 +1,52 @@
 /*
- * Landing page only. Deliberately one committed dark world rather than a
- * light/dark pair: the canvas is a bright working surface, so the page around it
- * should read as the room the whiteboard is in, with the ink as the only thing
- * that glows. Every colour is painted explicitly so nothing borrows the host.
+ * Landing page.
+ *
+ * Rewritten to get out of the generated-looking cluster the first attempt
+ * landed in: gradient text, a gradient-filled button, a 2x2 grid of rounded
+ * cards each ending in a metric, and a radial blur standing in for texture.
+ *
+ * What replaces it: flat accent colour on type and buttons, and a spec-sheet
+ * layout of hairline rows instead of cards. The page texture is graph paper,
+ * which is the product's own material rather than a decorative glow.
  */
 
 .landing {
-  --void: #08070f;
-  --panel: #0f0d1c;
-  --panel-lift: #16132a;
-  --edge: #241f42;
-  --edge-bright: #362e63;
-
-  --text: #ece9ff;
-  --text-dim: #a49dc9;
-  --text-faint: #6f6894;
-
-  --iris: #8b6dff;
-  --iris-bright: #a88dff;
-  --iris-deep: #5b3fd6;
-  --cyan: #4fd6e8;
-
-  --stroke-from: #a88dff;
-  --stroke-to: #4fd6e8;
-
-  --display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-
   position: relative;
   min-height: 100%;
-  background: var(--void);
-  color: var(--text);
-  font-family: var(--display);
+  background: var(--ink-void);
+  color: var(--ink-text);
+  font-family: var(--font-display);
   overflow-x: hidden;
 }
 
-/* One soft light source behind the hero, so the page has a direction. */
-.landing .glow {
+.landing .paper {
   position: absolute;
-  inset: -20% -10% auto -10%;
-  height: 70vh;
+  inset: 0 0 auto 0;
+  height: 190vh;
   pointer-events: none;
-  background:
-    radial-gradient(60% 55% at 68% 25%, rgba(139, 109, 255, 0.22), transparent 70%),
-    radial-gradient(45% 45% at 20% 10%, rgba(79, 214, 232, 0.1), transparent 70%);
-  filter: blur(10px);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  /* Fades out downward so the grid reads as a surface the page sits on, not
+     as wallpaper running to the edge. */
+  mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 62%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 62%);
 }
 
-.landing main,
-.landing .bar,
-.landing .foot {
+.landing .shell {
   position: relative;
-  max-width: 68rem;
+  max-width: 72rem;
   margin: 0 auto;
-  padding-inline: 2rem;
+  padding-inline: 2.5rem;
+}
+
+/* ---------- rule ---------- */
+
+.landing .rule {
+  border: 0;
+  border-top: 1px solid var(--ink-line);
+  margin: 0;
 }
 
 /* ---------- bar ---------- */
@@ -62,271 +55,278 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-block: 1.75rem;
+  padding-block: 1.5rem;
 }
 
 .landing .mark {
-  font-family: var(--mono);
-  font-size: 0.95rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .landing .bar nav {
   display: flex;
-  gap: 1.5rem;
-  font-size: 0.8125rem;
+  gap: 1.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .landing .bar a {
-  color: var(--text-faint);
+  color: var(--ink-faint);
   text-decoration: none;
   transition: color 0.15s;
 }
 
 .landing .bar a:hover {
-  color: var(--iris-bright);
+  color: var(--ink-accent-hot);
 }
 
 /* ---------- hero ---------- */
 
 .landing .hero {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 3.5rem;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 4rem;
   align-items: center;
-  padding-block: clamp(3rem, 9vw, 6.5rem) clamp(3rem, 7vw, 5rem);
+  padding-block: clamp(3.5rem, 9vw, 7rem);
 }
 
 .landing .eyebrow {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--iris);
-  margin: 0 0 1.25rem;
+  color: var(--ink-accent);
+  margin: 0 0 1.5rem;
 }
 
 .landing h1 {
-  font-size: clamp(2.6rem, 6.5vw, 4.25rem);
-  line-height: 1.02;
-  letter-spacing: -0.035em;
-  font-weight: 660;
-  margin: 0 0 1.5rem;
+  font-size: clamp(2.8rem, 6.8vw, 4.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  font-weight: 780;
+  margin: 0 0 1.75rem;
   text-wrap: balance;
 }
 
-.landing h1 em {
-  font-style: normal;
-  background: linear-gradient(100deg, var(--iris-bright) 10%, var(--cyan) 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Flat, not a gradient. A solid accent line reads as a decision; a gradient
+   reads as a template. */
+.landing h1 span {
+  color: var(--ink-accent);
 }
 
 .landing .lede {
   font-size: 1.0625rem;
-  line-height: 1.6;
-  color: var(--text-dim);
-  max-width: 34rem;
-  margin: 0 0 2rem;
+  line-height: 1.62;
+  color: var(--ink-dim);
+  max-width: 33rem;
+  margin: 0 0 2.25rem;
   text-wrap: pretty;
 }
 
 .landing .cta {
   display: flex;
   align-items: center;
-  gap: 1.1rem;
+  gap: 1.25rem;
   flex-wrap: wrap;
 }
 
 .landing .primary {
   font: inherit;
   font-size: 0.9375rem;
-  font-weight: 560;
-  color: #120c25;
-  background: linear-gradient(100deg, var(--iris-bright), var(--cyan));
+  font-weight: 640;
+  letter-spacing: 0.01em;
+  color: #0b0813;
+  background: var(--ink-accent);
   border: 0;
-  border-radius: 9px;
-  padding: 0.8rem 1.6rem;
+  border-radius: 3px;
+  padding: 0.85rem 1.9rem;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 6px 24px -10px rgba(139, 109, 255, 0.9);
+  transition: background 0.15s;
 }
 
 .landing .primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 30px -10px rgba(139, 109, 255, 1);
+  background: var(--ink-accent-hot);
 }
 
-.landing .primary:active {
-  transform: translateY(0);
+.landing .primary:focus-visible {
+  outline: 2px solid var(--ink-accent-hot);
+  outline-offset: 3px;
 }
 
 .landing .aside {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 0.6875rem;
-  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
 }
 
-/* ---------- the stroke demo ---------- */
+/* ---------- the stroke specimen ---------- */
 
 .landing .morph {
   margin: 0;
-  padding: 1.75rem;
-  border: 1px solid var(--edge);
-  border-radius: 16px;
-  background:
-    linear-gradient(var(--panel), var(--panel-lift));
-  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--ink-line);
+  background: var(--ink-surface);
+}
+
+.landing .morph .specimen-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--ink-line);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
 .landing .morph svg {
   display: block;
   width: 100%;
   height: auto;
+  padding: 1.75rem;
+  box-sizing: border-box;
 }
 
 .landing .morph figcaption {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.9rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--edge);
-  font-family: var(--mono);
+  gap: 0.55rem;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--ink-line);
+  font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.06em;
-  color: var(--text-faint);
+  color: var(--ink-dim);
 }
 
 .landing .morph .dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--cyan);
-  transition: opacity 0.3s;
+  background: var(--ink-accent);
+  transition: opacity 0.25s;
 }
 
-/* ---------- counters ---------- */
+/* ---------- counters, one strip ---------- */
 
 .landing .counters {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: var(--edge);
-  border: 1px solid var(--edge);
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.landing .counters div {
-  background: var(--panel);
-  padding: 1.4rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3.5rem;
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--ink-line);
+  border-bottom: 1px solid var(--ink-line);
 }
 
 .landing .counters .value {
-  display: block;
-  font-family: var(--mono);
-  font-size: 1.6rem;
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
 }
 
 .landing .counters .label {
   display: block;
-  margin-top: 0.2rem;
-  font-size: 0.75rem;
-  color: var(--text-faint);
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
-/* ---------- capabilities ---------- */
+/* ---------- spec sheet, not cards ---------- */
 
-.landing .capabilities {
+.landing .spec {
+  padding-block: clamp(3rem, 7vw, 5rem);
+}
+
+.landing .spec-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.25rem;
-  padding-block: clamp(3.5rem, 8vw, 6rem);
+  grid-template-columns: 11rem 1fr 9rem;
+  gap: 2.5rem;
+  align-items: start;
+  padding-block: 2.25rem;
+  border-bottom: 1px solid var(--ink-line);
 }
 
-.landing .capabilities article {
-  padding: 1.9rem;
-  border: 1px solid var(--edge);
-  border-radius: 14px;
-  background: var(--panel);
-  transition: border-color 0.2s, transform 0.2s;
+.landing .spec-row:first-child {
+  border-top: 1px solid var(--ink-line);
 }
 
-.landing .capabilities article:hover {
-  border-color: var(--edge-bright);
-  transform: translateY(-2px);
+.landing .spec-key {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 0.3rem;
 }
 
-.landing .capabilities .eyebrow {
-  margin-bottom: 0.9rem;
-  color: var(--text-faint);
+.landing .spec-row h2 {
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  font-weight: 660;
+  margin: 0 0 0.55rem;
 }
 
-.landing .capabilities h2 {
-  font-size: 1.2rem;
-  line-height: 1.25;
-  letter-spacing: -0.018em;
-  font-weight: 620;
-  margin: 0 0 0.7rem;
-}
-
-.landing .capabilities p {
-  font-size: 0.9rem;
+.landing .spec-row p {
+  font-size: 0.9375rem;
   line-height: 1.62;
-  color: var(--text-dim);
+  color: var(--ink-dim);
   margin: 0;
+  max-width: 40rem;
   text-wrap: pretty;
 }
 
-.landing .metric {
-  display: flex;
-  align-items: baseline;
-  gap: 0.55rem;
-  margin-top: 1.4rem !important;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--edge);
+.landing .spec-value {
+  text-align: right;
+  padding-top: 0.15rem;
 }
 
-.landing .metric strong {
-  font-family: var(--mono);
-  font-size: 1.15rem;
+.landing .spec-value strong {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
   font-weight: 600;
-  color: var(--iris-bright);
+  color: var(--ink-accent);
+  font-variant-numeric: tabular-nums;
 }
 
-.landing .metric span {
-  font-size: 0.75rem;
-  color: var(--text-faint);
+.landing .spec-value span {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
 /* ---------- closer ---------- */
 
 .landing .closer {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1.6rem;
-  padding: clamp(3rem, 7vw, 4.5rem) 2rem;
-  border: 1px solid var(--edge);
-  border-radius: 18px;
-  background:
-    radial-gradient(70% 120% at 50% 0%, rgba(139, 109, 255, 0.16), transparent 70%),
-    var(--panel);
-  text-align: center;
+  justify-content: space-between;
+  gap: 2rem;
+  flex-wrap: wrap;
+  padding-block: clamp(3rem, 6vw, 4.5rem);
+  border-top: 1px solid var(--ink-line);
 }
 
 .landing .closer h2 {
-  font-size: clamp(1.5rem, 3.6vw, 2.1rem);
-  letter-spacing: -0.028em;
-  font-weight: 640;
+  font-size: clamp(1.5rem, 3.4vw, 2.15rem);
+  letter-spacing: -0.03em;
+  font-weight: 700;
   margin: 0;
+  max-width: 26rem;
   text-wrap: balance;
 }
 
@@ -337,35 +337,40 @@
   justify-content: space-between;
   gap: 1.5rem;
   flex-wrap: wrap;
-  margin-top: clamp(3rem, 7vw, 5rem);
-  padding-block: 2rem;
-  border-top: 1px solid var(--edge);
-  font-size: 0.75rem;
-  color: var(--text-faint);
-}
-
-.landing .foot .mono {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+  padding-block: 2rem 3rem;
+  border-top: 1px solid var(--ink-line);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
 }
 
 /* ---------- narrow ---------- */
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
+  .landing .shell {
+    padding-inline: 1.35rem;
+  }
   .landing .hero {
     grid-template-columns: 1fr;
-    gap: 2.5rem;
+    gap: 2.75rem;
   }
-  .landing .capabilities {
+  .landing .spec-row {
     grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+  .landing .spec-value {
+    text-align: left;
+  }
+  .landing .spec-value strong {
+    display: inline;
+  }
+  .landing .spec-value span {
+    display: inline;
+    margin-left: 0.5rem;
   }
   .landing .counters {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .landing main,
-  .landing .bar,
-  .landing .foot {
-    padding-inline: 1.25rem;
+    gap: 2rem;
   }
 }
 

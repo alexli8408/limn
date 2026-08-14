@@ -369,7 +369,11 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const initialData = useMemo(
     () => ({
       elements: props.initialElements as never,
-      appState: { viewBackgroundColor: "#ffffff", currentItemRoughness: 1 },
+      appState: {
+        viewBackgroundColor: "#12151d",
+        currentItemRoughness: 1,
+        theme: "dark" as const,
+      },
       scrollToContent: true,
     }),
     [props.initialElements],
@@ -397,6 +401,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           initialData={initialData}
           onChange={onChange as never}
           onPointerUpdate={onPointerUpdate as never}
+          theme="dark"
           viewModeEnabled={readOnly}
           UIOptions={{ canvasActions: { toggleTheme: true, loadScene: false } }}
         >
@@ -410,7 +415,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             </MainMenu.Item>
           </MainMenu>
           <Footer>
-            <div className="pointer-events-none px-3 text-xs text-neutral-400">
+            <div className="pointer-events-none px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
               {collab.isWriter ? "persisting" : "following"} · v{collab.savedVersion}
             </div>
           </Footer>
@@ -419,7 +424,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         <RemoteCursors cursors={collab.cursors} api={api} />
 
         {collab.peerActivity && (
-          <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-neutral-900/90 px-3 py-1.5 text-xs text-white shadow-lg">
+          <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] px-3 py-1.5 text-xs text-[var(--ink-dim)] shadow-lg">
             <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
             {collab.peerActivity.label} is{" "}
             {collab.peerActivity.mode === "vectorize"

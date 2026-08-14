@@ -1,0 +1,57 @@
+/*
+ * One palette for the whole product.
+ *
+ * The landing page and the board chrome used to be different worlds, a dark
+ * marketing page in front of light grey app furniture, which read as two
+ * products stapled together. These tokens are the shared surface, so the header
+ * above the canvas belongs to the same thing as the page that sold it.
+ *
+ * Committed to dark rather than following the viewer's theme. The canvas is a
+ * bright working surface; everything around it is the room it sits in, and the
+ * ink is the only thing that carries colour.
+ */
+
+:root {
+  /* Near-black with a blue cast, so the neutrals lean toward the accent
+     instead of sitting at a dead grey. */
+  --ink-void: #07080c;
+  --ink-surface: #0c0e14;
+  --ink-raised: #12151d;
+  --ink-line: #1c2130;
+  --ink-line-bright: #2b3244;
+
+  --ink-text: #e9ecf4;
+  --ink-dim: #98a0b4;
+  --ink-faint: #5f6779;
+
+  /* One accent, flat. No gradients on type or buttons. */
+  --ink-accent: #7c5cff;
+  --ink-accent-hot: #9b83ff;
+  --ink-accent-deep: #3a2a8f;
+  --ink-accent-wash: rgba(124, 92, 255, 0.08);
+
+  --ink-good: #46c98b;
+  --ink-warn: #e0a341;
+  --ink-bad: #e5556b;
+
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Graph paper. The product's own material, used as the page texture rather
+     than a decorative blur. */
+  --grid-size: 26px;
+  --grid-line: rgba(124, 92, 255, 0.055);
+}
+
+/* Reusable drafting grid. Applied as a masked overlay so it fades out instead
+   of tiling to the edge of the viewport. */
+.draft-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+}

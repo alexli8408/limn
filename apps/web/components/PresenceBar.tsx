@@ -62,20 +62,20 @@ export default function PresenceBar(props: Props) {
   };
 
   return (
-    <header className="z-20 flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-3 dark:border-neutral-800 dark:bg-neutral-900">
+    <header className="z-20 flex h-12 shrink-0 items-center gap-3 border-b border-[var(--ink-line)] bg-[var(--ink-surface)] px-3">
       <a
         href="/dashboard"
-        className="shrink-0 font-mono text-sm font-semibold tracking-tight text-neutral-900 dark:text-neutral-100"
+        className="shrink-0 font-mono text-sm font-bold uppercase tracking-[0.14em] text-[var(--ink-text)]"
       >
         limn
       </a>
 
-      <span className="truncate text-sm text-neutral-600 dark:text-neutral-300">
+      <span className="truncate text-sm text-[var(--ink-dim)]">
         {props.title}
       </span>
 
       <span
-        className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+        className="flex items-center gap-1.5 rounded-sm border border-[var(--ink-line)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-dim)]"
         title={
           props.isWriter
             ? "This tab is the elected writer and is persisting the board"
@@ -86,7 +86,7 @@ export default function PresenceBar(props: Props) {
         {status.text}
       </span>
 
-      <span className="hidden text-[11px] text-neutral-400 sm:inline">
+      <span className="hidden font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)] sm:inline">
         v{props.savedVersion} · {relative(props.lastSavedAt)}
       </span>
 
@@ -95,10 +95,10 @@ export default function PresenceBar(props: Props) {
           <button
             type="button"
             onClick={props.onToggleBeautify}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+            className={`rounded-sm px-2.5 py-1 text-xs font-medium transition ${
               props.beautifyOn
-                ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                ? "bg-[var(--ink-accent)] text-[#0b0813]"
+                : "border border-[var(--ink-line)] text-[var(--ink-faint)] hover:text-[var(--ink-dim)]"
             }`}
             title={
               accuracy === null
@@ -118,14 +118,14 @@ export default function PresenceBar(props: Props) {
             <span
               key={peer.peerId}
               title={`${peer.name}${peer.guest ? " (guest)" : ""} · ${peer.role}`}
-              className="grid h-6 w-6 place-items-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-neutral-900"
+              className="grid h-6 w-6 place-items-center rounded-full border-2 border-[var(--ink-surface)] text-[10px] font-semibold text-white"
               style={{ backgroundColor: peer.color }}
             >
               {peer.name.slice(0, 1).toUpperCase()}
             </span>
           ))}
           {props.peers.length > 6 && (
-            <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-neutral-400 text-[10px] font-semibold text-white dark:border-neutral-900">
+            <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-[var(--ink-surface)] bg-[var(--ink-line-bright)] text-[10px] font-semibold text-white">
               +{props.peers.length - 6}
             </span>
           )}
@@ -134,7 +134,7 @@ export default function PresenceBar(props: Props) {
         <button
           type="button"
           onClick={copyShare}
-          className="rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-sm bg-[var(--ink-accent)] px-2.5 py-1 text-xs font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
         >
           {copied ? "Copied" : "Share"}
         </button>

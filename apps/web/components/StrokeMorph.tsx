@@ -185,25 +185,26 @@ export default function StrokeMorph() {
 
   return (
     <figure className="morph" aria-label="A hand-drawn stroke snapping to a clean shape">
+      <div className="specimen-head">
+        <span>specimen {String(index + 1).padStart(2, "0")}/{String(figures.length).padStart(2, "0")}</span>
+        <span>live recogniser</span>
+      </div>
       <svg viewBox="0 0 260 190" role="img">
-        <defs>
-          <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="var(--stroke-from)" />
-            <stop offset="100%" stopColor="var(--stroke-to)" />
-          </linearGradient>
-        </defs>
         <path
           d={toPath(blended)}
           fill="none"
-          stroke="url(#ink)"
+          /* Flat accent, not a gradient. */
+          stroke="var(--ink-accent-hot)"
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>
       <figcaption>
-        <span className="dot" style={{ opacity: t > 0.9 ? 1 : 0.25 }} />
-        {t > 0.9 ? `${figure.kind} · ${Math.round(figure.confidence * 100)}%` : "freehand"}
+        <span className="dot" style={{ opacity: t > 0.9 ? 1 : 0.2 }} />
+        {t > 0.9
+          ? `${figure.kind} · ${Math.round(figure.confidence * 100)}% confidence`
+          : "freehand stroke"}
       </figcaption>
     </figure>
   );
