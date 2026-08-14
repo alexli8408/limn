@@ -96,6 +96,16 @@ export function pointLineDistance(p: Point, a: Point, b: Point): number {
   return Math.abs(cross(ab, sub(p, a))) / len;
 }
 
+/** Distance from `p` to the finite segment `a`–`b` (clamped, unlike the line form). */
+export function pointSegmentDistance(p: Point, a: Point, b: Point): number {
+  const ab = sub(b, a);
+  const lenSq = dot(ab, ab);
+  if (lenSq < 1e-12) return dist(p, a);
+  let t = dot(sub(p, a), ab) / lenSq;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return dist(p, [a[0] + ab[0] * t, a[1] + ab[1] * t]);
+}
+
 /** Interior turn angle at `b`, in radians. 0 = straight through, π = full reversal. */
 export function turnAngle(a: Point, b: Point, c: Point): number {
   const v1 = unit(sub(b, a));
