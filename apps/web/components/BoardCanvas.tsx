@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import {
+  Excalidraw,
   CaptureUpdateAction,
   Footer,
   MainMenu,
@@ -21,21 +21,9 @@ import PresenceBar from "./PresenceBar";
 import AiPanel, { type AiRun } from "./AiPanel";
 import "@excalidraw/excalidraw/index.css";
 
-/**
- * Excalidraw is browser-only — it reaches for `window` at module scope — so it
- * must never be part of the server render.
- */
-const Excalidraw = dynamic(
-  () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full w-full items-center justify-center text-sm text-neutral-500">
-        Loading canvas…
-      </div>
-    ),
-  },
-);
+// Imported directly rather than via next/dynamic: BoardCanvasLoader already
+// keeps this whole module off the server, so a second ssr:false boundary here
+// would only add a render pass.
 
 export interface BoardCanvasProps {
   boardId: string;

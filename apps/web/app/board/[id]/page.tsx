@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import type { SyncElement } from "@limn/protocol";
 import { supabaseServer } from "@/lib/supabase/server";
 import { publicEnv } from "@/lib/env";
-import BoardCanvas from "@/components/BoardCanvas";
+import BoardCanvasLoader from "@/components/BoardCanvasLoader";
 
 /**
  * Board page.
@@ -71,7 +71,7 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
 
   return (
     <main className="h-full">
-      <BoardCanvas
+      <BoardCanvasLoader
         boardId={board.id}
         title={board.title}
         userId={auth.user.id}
