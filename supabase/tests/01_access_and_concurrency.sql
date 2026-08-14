@@ -142,6 +142,36 @@ select public.topic_board_id('board:not-a-uuid') as bad_uuid,
        public.topic_board_id(null) as null_topic;
 
 \echo ''
+\echo '=== table privileges must be narrow, not inherited defaults ==='
+select table_name,
+       string_agg(distinct privilege_type, ',' order by privilege_type) as granted
+from information_schema.role_table_grants
+where grantee = 'authenticated' and table_schema = 'public'
+group by table_name order by table_name;
+
+do $$
+declare
+  v_bad text;
+begin
+  -- board_snapshots must be SELECT-only: writes go through the CAS function.
+  select string_agg(privilege_type, ',') into v_bad
+  from information_schema.role_table_grants
+  where grantee='authenticated' and table_schema='public'
+    and table_name='board_snapshots' and privilege_type <> 'SELECT';
+  if v_bad is not null then
+    raise notice 'UNEXPECTED: authenticated holds % on board_snapshots', v_bad;
+  end if;
+
+  -- anon must hold nothing at all; it only ever calls platform_stats().
+  select string_agg(distinct table_name, ',') into v_bad
+  from information_schema.role_table_grants
+  where grantee='anon' and table_schema='public';
+  if v_bad is not null then
+    raise notice 'UNEXPECTED: anon holds table privileges on %', v_bad;
+  end if;
+end $$;
+
+\echo ''
 \echo '=== platform_stats ==='
 select public.platform_stats() -> 'boards' as boards,
        public.platform_stats() -> 'elements' as elements;

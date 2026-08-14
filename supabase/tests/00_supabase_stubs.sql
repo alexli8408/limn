@@ -50,3 +50,11 @@ create table realtime.messages (
 
 create or replace function realtime.topic() returns text
 language sql stable as $$ select current_setting('realtime.topic', true) $$;
+
+-- Hosted Supabase ships default ACLs granting arwdDxtm on every new table in
+-- schema public to anon and authenticated. Without reproducing that here, the
+-- grant-tightening migration is untestable locally: plain Postgres grants
+-- nothing by default, so an over-permissive deployment looks identical to a
+-- correct one.
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant all on sequences to anon, authenticated;
