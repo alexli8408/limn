@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# tooling
+.vercel/
+.turbo/
+coverage/
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# local artifacts
+/tmp/
+loadtest-results/
+supabase/.temp/

@@ -1,0 +1,28 @@
+{
+  "name": "limn",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Realtime collaborative whiteboard with OpenCV stroke beautification and Gemini-powered diagram synthesis.",
+  "packageManager": "pnpm@11.1.1",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter ./packages/... build && pnpm --filter @limn/realtime build && pnpm --filter @limn/web build",
+    "build:packages": "pnpm -r --filter ./packages/... build",
+    "dev": "pnpm build:packages && concurrently -n web,rt,cv -c cyan,magenta,green \"pnpm dev:web\" \"pnpm dev:realtime\" \"pnpm dev:vision\"",
+    "dev:web": "pnpm --filter @limn/web dev",
+    "dev:realtime": "pnpm --filter @limn/realtime dev",
+    "dev:vision": "cd apps/vision && ./.venv/bin/python -m uvicorn main:app --reload --port 8000",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "loadtest": "pnpm --filter @limn/scripts loadtest",
+    "db:push": "supabase db push",
+    "db:reset": "supabase db reset"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
