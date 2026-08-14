@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!--
+    The product in one mark: a clean box, and the stroke that carried on past
+    the corner.
+
+    The overshoot is what every freehand rectangle does and what the recogniser
+    tidies away, so it is the one detail worth keeping. It sits on the top right
+    rather than the top left because an ascender on the left turns the whole
+    mark into a lowercase "b", which is what the first two attempts did.
+
+    At 16px only the violet box survives. That is the right thing to lose down
+    to, since a favicon is a colour and a silhouette at that size and nothing more.
+  -->
+  <rect width="32" height="32" rx="7.5" fill="#07080c" />
+  <g fill="none" stroke="#7c5cff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.6 10.6 H22.4 V22.4 H9.6 Z" />
+    <path d="M22.4 10.6 H25.6" />
+  </g>
+</svg>
