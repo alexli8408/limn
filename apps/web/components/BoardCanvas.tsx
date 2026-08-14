@@ -374,7 +374,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     () => ({
       elements: props.initialElements as never,
       appState: {
-        viewBackgroundColor: "#12151d",
+        // Light, deliberately, even though the board renders dark. Excalidraw's
+        // dark theme is an inversion filter over the whole canvas, so it wants
+        // light-theme colours and darkens them itself. Handing it an already
+        // dark background inverted it back to light, and since element strokes
+        // default to near-black and invert to near-white, a fresh board drew
+        // pale strokes on a pale canvas and looked empty.
+        viewBackgroundColor: "#ffffff",
         currentItemRoughness: 1,
         theme: "dark" as const,
       },
