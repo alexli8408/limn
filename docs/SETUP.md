@@ -279,8 +279,8 @@ Order matters from here: Render gives you a key that Vercel needs.
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from Phase 2d |
    | `NEXT_PUBLIC_SITE_URL` | `https://<your-app>.vercel.app` |
    | `GEMINI_API_KEY` | from Phase 3 |
-   | `GEMINI_MODEL` | `gemini-2.5-flash` |
-   | `GEMINI_MODEL_PRO` | `gemini-2.5-pro` |
+   | `GEMINI_MODEL` | `gemini-3.5-flash` |
+   | `GEMINI_MODEL_PRO` | `gemini-3.6-flash` |
    | `VISION_SERVICE_URL` | your Render URL, **no trailing slash** |
    | `VISION_API_KEY` | the key Render generated in Phase 6 |
 

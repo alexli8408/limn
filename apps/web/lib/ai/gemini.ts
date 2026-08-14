@@ -81,12 +81,68 @@ interface GenerateArgs {
   parts: Record<string, unknown>[];
   model: string;
   temperature: number;
+  /** Used when `model` is refused for quota reasons. */
+  fallbackModel?: string;
 }
 
-async function generate(args: GenerateArgs): Promise<GenerateResult> {
+/** Codes worth retrying rather than surfacing. */
+const TRANSIENT = new Set([429, 500, 502, 503, 504]);
+
+function statusOf(error: unknown): number {
+  if (typeof error === "object" && error !== null) {
+    const e = error as { status?: unknown; code?: unknown; message?: unknown };
+    for (const v of [e.status, e.code]) {
+      if (typeof v === "number") return v;
+      if (typeof v === "string" && /^\d{3}$/.test(v)) return Number(v);
+    }
+    const m = typeof e.message === "string" ? e.message.match(/\b(4\d{2}|5\d{2})\b/) : null;
+    if (m?.[1]) return Number(m[1]);
+  }
+  return 0;
+}
+
+/**
+ * Network faults that never reached the API, so no status code exists.
+ *
+ * These matter more than they look. A proxy or a flaky link resets the socket
+ * well before Gemini is involved, and treating that as a hard failure surfaces
+ * to the user as "generation failed" for something a single retry fixes.
+ */
+const RETRYABLE_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "EAI_AGAIN",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+function isNetworkFault(error: unknown): boolean {
+  let node: unknown = error;
+  // fetch wraps the real cause one or two levels down.
+  for (let depth = 0; depth < 3 && node; depth++) {
+    const e = node as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && RETRYABLE_CODES.has(e.code)) return true;
+    if (
+      typeof e.message === "string" &&
+      /socket disconnected|network|fetch failed|terminated/i.test(e.message)
+    ) {
+      return true;
+    }
+    node = e.cause;
+  }
+  return false;
+}
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult> {
   const started = Date.now();
 
-  const response = await ai().models.generateContent({
+  let response;
+  try {
+    response = await ai().models.generateContent({
     model: args.model,
     contents: [{ role: "user", parts: args.parts }],
     config: {
@@ -97,9 +153,38 @@ async function generate(args: GenerateArgs): Promise<GenerateResult> {
       responseMimeType: "application/json",
       responseSchema: geminiDiagramSchema as unknown as Record<string, unknown>,
       temperature: args.temperature,
-      maxOutputTokens: 8192,
+      // Gemini 3.x reasons before answering and those tokens come out of this
+      // same budget. A 9-node diagram measured ~1k output against ~2k thinking,
+      // so a budget sized only for the JSON truncates mid-object and the
+      // response schema does not save you: you get valid-looking partial JSON.
+      maxOutputTokens: 16384,
     },
-  });
+    });
+  } catch (error) {
+    const status = statusOf(error);
+
+    // 503 means the model is momentarily oversubscribed, which happens often
+    // enough on the newest models to be worth riding out rather than surfacing.
+    // A socket reset gets the same treatment: it never reached the API at all.
+    if ((TRANSIENT.has(status) || isNetworkFault(error)) && attempt < 3) {
+      await wait(700 * 2 ** attempt);
+      return generate(args, attempt + 1);
+    }
+
+    // 429 on the higher-quality model usually means it is not on the caller's
+    // tier at all. Falling back beats failing the request outright.
+    if (status === 429 && args.fallbackModel && args.model !== args.fallbackModel) {
+      return generate({ ...args, model: args.fallbackModel }, 0);
+    }
+
+    if (status === 404) {
+      throw new Error(
+        `Gemini model "${args.model}" is unavailable to this API key. ` +
+          `List what your key can reach with: curl "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY"`,
+      );
+    }
+    throw error;
+  }
 
   const text = response.text;
   if (!text) throw new Error("Gemini returned an empty response");
@@ -160,6 +245,7 @@ export async function refineSketch(input: {
     system: REFINE_SYSTEM,
     parts,
     model: input.pro ? env.geminiModelPro : env.geminiModel,
+    fallbackModel: env.geminiModel,
     // Low but not zero: at 0 the model repeats a bad reading of an ambiguous
     // sketch on every retry, so the user has no way to get a different answer.
     temperature: 0.2,
@@ -176,6 +262,7 @@ export async function diagramFromPrompt(input: {
     system: PROMPT_SYSTEM,
     parts: [{ text: input.prompt }],
     model: input.pro ? env.geminiModelPro : env.geminiModel,
+    fallbackModel: env.geminiModel,
     temperature: 0.4,
   });
 }

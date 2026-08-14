@@ -9,7 +9,7 @@ changing what you meant by it.
                                        ├── Vercel
   Supabase Realtime (Broadcast + Presence, WebSocket)
   Supabase Postgres (RLS, SECURITY DEFINER RPCs)
-  Gemini 2.5 (constrained-schema decoding)
+  Gemini 3.x (constrained-schema decoding)
                                        ┌── Render (+ UptimeRobot keepalive)
   FastAPI / OpenCV 4.10 ───────────────┘
 ```
