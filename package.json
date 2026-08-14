@@ -16,10 +16,12 @@
     "dev:vision": "cd apps/vision && ./.venv/bin/python -m uvicorn main:app --reload --port 8000",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
+    "test": "pnpm --filter @limn/protocol test && pnpm --filter @limn/shapes test && pnpm --filter @limn/web test && pnpm test:db && pnpm test:vision",
     "loadtest": "pnpm --filter @limn/scripts loadtest",
     "db:push": "supabase db push",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "test:db": "./supabase/tests/run.sh",
+    "test:vision": "cd apps/vision && ./.venv/bin/python -m pytest tests -q"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

@@ -1,0 +1,46 @@
+# Render blueprint for the OpenCV vision service.
+#
+# Apply with: Render dashboard → New → Blueprint → point at this repo.
+#
+# Only the vision service lives here. The Next.js app is on Vercel, and sync
+# runs over Supabase Realtime, so there is no socket server to host.
+
+services:
+  - type: web
+    name: limn-vision
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: apps/vision
+
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    # One worker on purpose. The free instance has a fraction of a vCPU, and a
+    # second worker doubles memory for OpenCV without adding throughput.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+
+    # Render restarts the instance if this stops answering. It is also what
+    # UptimeRobot pings to keep a free instance from sleeping — see docs/DEPLOY.md.
+    healthCheckPath: /health
+
+    envVars:
+      # opencv-contrib-python-headless 4.10 publishes wheels up to cp312. On 3.13
+      # pip falls back to building from source and the build times out.
+      - key: PYTHON_VERSION
+        value: 3.12.7
+
+      # Shared secret with the Next.js proxy routes. Render generates it; copy the
+      # value into VISION_API_KEY on Vercel.
+      - key: VISION_API_KEY
+        generateValue: true
+
+      # Comma-separated. Must include the Vercel production and preview origins.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # OpenCV defaults to one thread per core, which oversubscribes a shared
+      # vCPU and makes latency wildly variable under any concurrency.
+      - key: OPENCV_THREADS
+        value: 2
+
+      - key: LOG_LEVEL
+        value: INFO
