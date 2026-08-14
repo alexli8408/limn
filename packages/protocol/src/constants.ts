@@ -1,54 +1,60 @@
 /**
- * Wire-level constants shared by the browser client and the Render websocket
- * server. Anything that both sides must agree on numerically lives here so the
- * two can never drift.
+ * Constants shared by every peer on a board. Supabase Realtime gives us a
+ * WebSocket fan-out but no server-side logic, so all convergence rules live
+ * here and each client enforces them identically.
  */
 
-/** Bumped whenever the message union changes shape incompatibly. */
+/** Bumped whenever the broadcast event union changes shape incompatibly. */
 export const PROTOCOL_VERSION = 3;
+
+/** Channel naming. Realtime authorization policies match on this prefix. */
+export const BOARD_CHANNEL_PREFIX = "board:";
+export const boardChannel = (boardId: string) => `${BOARD_CHANNEL_PREFIX}${boardId}`;
+
+/* ---------------------------------------------------------------- */
+/* pacing                                                            */
+/* ---------------------------------------------------------------- */
 
 /** Scene deltas are coalesced into at most one frame every N ms (~30 fps). */
 export const SCENE_FLUSH_INTERVAL_MS = 33;
 
-/** Pointer positions are ephemeral; 20 fps is indistinguishable from 60 here. */
-export const POINTER_FLUSH_INTERVAL_MS = 50;
+/** Cursors are ephemeral; 20 fps is indistinguishable from 60 and costs 1/3. */
+export const CURSOR_FLUSH_INTERVAL_MS = 50;
 
-/** Client heartbeat period. Server terminates a socket after 2.5 missed beats. */
-export const HEARTBEAT_INTERVAL_MS = 15_000;
-export const HEARTBEAT_TIMEOUT_MS = 37_500;
+/**
+ * Realtime's client-side token bucket. The default of 10/s starves a 30 fps
+ * scene channel, so we raise it and stay under it with our own coalescing.
+ */
+export const REALTIME_EVENTS_PER_SECOND = 40;
 
-/** Server persists a dirty room at most this often, and at least this often. */
+/** Snapshot cadence for the elected writer. Debounce, with a hard ceiling. */
 export const SNAPSHOT_DEBOUNCE_MS = 4_000;
 export const SNAPSHOT_MAX_DELAY_MS = 20_000;
 
-/** Hard ceilings. Exceeding any of these closes the socket with a policy code. */
-export const MAX_MESSAGE_BYTES = 1_500_000;
-export const MAX_ELEMENTS_PER_UPDATE = 2_000;
-export const MAX_ELEMENTS_PER_ROOM = 20_000;
-export const MAX_PEERS_PER_ROOM = 64;
+/** A peer that has not refreshed presence in this long is treated as gone. */
+export const PEER_STALE_MS = 45_000;
 
-/** Token-bucket rate limit for inbound messages, per socket. */
-export const RATE_LIMIT_CAPACITY = 240;
-export const RATE_LIMIT_REFILL_PER_SEC = 120;
+/* ---------------------------------------------------------------- */
+/* limits                                                            */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Realtime rejects oversized frames outright, so large deltas are split into
+ * chunks below this budget. Kept well under the platform ceiling to leave room
+ * for the Phoenix envelope and base64 expansion of embedded file ids.
+ */
+export const MAX_BROADCAST_BYTES = 200_000;
+export const MAX_ELEMENTS_PER_UPDATE = 2_000;
+export const MAX_ELEMENTS_PER_BOARD = 20_000;
+export const MAX_PEERS_PER_BOARD = 64;
 
 /** Deleted elements are tombstoned this long before being dropped from state. */
 export const TOMBSTONE_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Close codes above 4000 are application-defined. */
-export const CloseCode = {
-  NORMAL: 1000,
-  POLICY_VIOLATION: 1008,
-  MESSAGE_TOO_BIG: 1009,
-  UNAUTHORIZED: 4001,
-  FORBIDDEN: 4003,
-  ROOM_FULL: 4004,
-  RATE_LIMITED: 4029,
-  PROTOCOL_MISMATCH: 4426,
-} as const;
+/* ---------------------------------------------------------------- */
+/* presence                                                          */
+/* ---------------------------------------------------------------- */
 
-export type CloseCodeValue = (typeof CloseCode)[keyof typeof CloseCode];
-
-/** Deterministic presence palette — index by a hash of the user id. */
 export const PRESENCE_COLORS = [
   "#e03131",
   "#1971c2",
@@ -62,6 +68,7 @@ export const PRESENCE_COLORS = [
   "#087f5b",
 ] as const;
 
+/** FNV-1a so every peer independently derives the same colour for a user. */
 export function presenceColorFor(seed: string): string {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
