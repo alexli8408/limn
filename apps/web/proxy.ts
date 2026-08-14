@@ -5,11 +5,14 @@ import { publicEnv } from "@/lib/env";
 /**
  * Refreshes the Supabase session on every navigation.
  *
+ * Named `proxy`, not `middleware`: Next 16 renamed the file convention and the
+ * old name only warns for now.
+ *
  * Access tokens are short-lived. Without a refresh on the server, a returning
  * user's first server render sees them as signed out, and the board page bounces
  * them to sign-in before the client has a chance to recover the session.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
