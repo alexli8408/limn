@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "pnpm build:packages && pnpm --filter @limn/web build",
-    "build:packages": "pnpm -r --filter ./packages/... build",
+    "build:packages": "pnpm --filter=\"./packages/*\" -r build",
     "dev": "pnpm build:packages && concurrently -n web,cv -c cyan,green \"pnpm dev:web\" \"pnpm dev:vision\"",
     "dev:web": "pnpm --filter @limn/web dev",
     "dev:vision": "cd apps/vision && ./.venv/bin/python -m uvicorn main:app --reload --port 8000",
