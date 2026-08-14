@@ -1,6 +1,10 @@
--- Records illustration runs alongside the other AI modes.
+-- Adds an unused 'illustrate' label to ai_mode.
 --
--- ALTER TYPE ... ADD VALUE is allowed inside a transaction on PG 12+ provided
--- the new label is not *used* in the same transaction, which is why this is its
--- own migration rather than part of one that also inserts rows.
+-- The illustration feature it was added for has been removed: image generation
+-- has no Gemini free-tier allowance, so the feature could not run without
+-- billing. The label stays because it is already applied to the deployed
+-- database, and removing a label from a Postgres enum means recreating the type
+-- and every column that uses it. An unused label costs nothing.
+--
+-- If illustration comes back, this is already here.
 alter type public.ai_mode add value if not exists 'illustrate';

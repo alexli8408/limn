@@ -111,7 +111,7 @@ export const savedEventSchema = z.object({
 export const aiEventSchema = z.object({
   ...envelope,
   phase: z.enum(["start", "done", "error"]),
-  mode: z.enum(["refine", "recompose", "prompt", "vectorize", "illustrate"]),
+  mode: z.enum(["refine", "recompose", "prompt", "vectorize"]),
   label: z.string().max(120).optional(),
 });
 

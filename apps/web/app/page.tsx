@@ -47,9 +47,9 @@ const CAPABILITIES = [
   {
     label: "when it helps",
     title: "Cleans up, or says it cannot",
-    body: "Hand it a diagram and it redraws the whole thing where you put it, with shared baselines and properly bound arrows. Hand it a drawing and it says so instead of turning your sketch into boxes, then offers to illustrate it instead.",
-    stat: "2",
-    statLabel: "ways to finish a sketch",
+    body: "Hand it a diagram and it redraws the whole thing where you put it, with shared baselines and properly bound arrows. Hand it a drawing and it tells you so, rather than forcing your sketch into boxes to fit what it knows how to make.",
+    stat: "3",
+    statLabel: "AI entry points",
   },
 ];
 

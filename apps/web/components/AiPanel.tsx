@@ -21,18 +21,16 @@ interface Props {
   onDismiss: () => void;
   onBeautify: (instruction?: string, quality?: "fast" | "high") => Promise<void>;
   onPrompt: (prompt: string, quality?: "fast" | "high") => Promise<void>;
-  onIllustrate: (instruction?: string) => Promise<void>;
   onVectorize: (file: File) => Promise<void>;
 }
 
-type Tab = "beautify" | "illustrate" | "prompt" | "photo";
+type Tab = "beautify" | "prompt" | "photo";
 
 export default function AiPanel(props: Props) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("beautify");
   const [instruction, setInstruction] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [style, setStyle] = useState("");
   const [quality, setQuality] = useState<"fast" | "high">("fast");
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -61,16 +59,15 @@ export default function AiPanel(props: Props) {
         {(
           [
             ["beautify", "Clean up"],
-            ["illustrate", "Illustrate"],
             ["prompt", "Describe"],
-            ["photo", "Photo"],
+            ["photo", "From photo"],
           ] as [Tab, string][]
         ).map(([key, label]) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`flex-1 px-2 py-2.5 text-[11px] font-medium transition ${
+            className={`flex-1 px-3 py-2.5 text-xs font-medium transition ${
               tab === key
                 ? "border-b-2 border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100"
                 : "text-neutral-400 hover:text-neutral-600"
@@ -109,34 +106,6 @@ export default function AiPanel(props: Props) {
               className="w-full rounded-md bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
             >
               Clean it up
-            </button>
-          </>
-        )}
-
-        {tab === "illustrate" && (
-          <>
-            <p className="text-xs leading-relaxed text-neutral-500">
-              Redraws a drawing as a finished illustration, keeping your
-              composition. You get a picture, not editable shapes, so it is
-              placed beside your sketch rather than replacing it.
-            </p>
-            <p className="rounded-md bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              Needs billing enabled on your Google AI Studio project. Image
-              generation has no free-tier allowance, unlike everything else here.
-            </p>
-            <input
-              value={style}
-              onChange={(event) => setStyle(event.target.value)}
-              placeholder="Optional: colourful, flat vector, watercolour…"
-              className="w-full rounded-md border border-neutral-200 bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700"
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void props.onIllustrate(style || undefined)}
-              className="w-full rounded-md bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-            >
-              Illustrate it
             </button>
           </>
         )}
