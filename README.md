@@ -1,7 +1,7 @@
 # Limn
 
-A realtime collaborative whiteboard where rough strokes become clean shapes as
-you draw, and a whole messy sketch can be redrawn as a proper diagram without
+A realtime collaborative whiteboard. Rough strokes become clean shapes as you
+draw, and a whole messy sketch can be redrawn as a proper diagram without
 changing what you meant by it.
 
 ```
@@ -20,8 +20,8 @@ changing what you meant by it.
 
 **Draws with you.** Every freehand stroke is classified the moment the pen
 lifts and replaced with a real rectangle, ellipse, diamond, triangle, line or
-arrow — in the same frame, entirely client-side. When it isn't sure, it leaves
-your stroke alone; when it is wrong, one Ctrl+Z gives you the wobble back.
+arrow, in the same frame and entirely client-side. When it isn't sure it leaves
+your stroke alone. When it is wrong, one Ctrl+Z gives you the wobble back.
 
 **Collaborates without a server.** Sync rides Supabase Realtime, which is a
 WebSocket fan-out with no place to run code. So convergence, persistence and
@@ -32,12 +32,12 @@ themselves from the presence map to persist the board.
 **Reads a physical whiteboard.** Photograph one and OpenCV flattens the
 perspective, separates ink from board under glare and uneven lighting, thins the
 ink to a one-pixel centreline, walks that into polylines and fits real shapes you
-can edit — not a traced image.
+can edit. Not a traced image.
 
-**Beautifies without rewriting.** Gemini reads a sketch (as both an image and an
-element list) and returns *structure*, never scene JSON. A deterministic
-compiler places it. Your arrangement survives, and the arrows are genuinely
-bound rather than merely adjacent.
+**Beautifies without rewriting.** Gemini reads a sketch, as both an image and an
+element list, and returns structure rather than scene JSON. A deterministic
+compiler places it. Your arrangement survives, and the arrows are properly bound
+rather than merely adjacent.
 
 ---
 
@@ -48,10 +48,10 @@ with the command beside it.
 
 | | Result | Reproduce |
 |---|---|---|
-| Stroke recognition accuracy | **95.8%** over 600 synthetic strokes (5 primitives, a third of them rotated, hand-tremor and closing-overshoot artefacts applied) | `pnpm --filter @limn/shapes test` |
-| Photo → diagram | **4/4** drawn primitives recovered with correct dimensions from a synthesised photo (perspective warp + illumination gradient + glare hotspot + sensor noise), in **~57 ms** | `cd apps/vision && pytest tests -q` |
-| Merge convergence | 5 simulated peers × 40 rounds of randomised delivery order, batching and replays — **no divergence**, no duplicates, no holes | `pnpm --filter @limn/protocol test` |
-| Access control | 12 assertions on RLS, share-link redemption and snapshot compare-and-swap, against real Postgres | `./supabase/tests/run.sh` |
+| Stroke recognition accuracy | **95.8%** over 600 synthetic strokes (5 primitives, a third of them rotated, with hand-tremor and closing-overshoot artefacts) | `pnpm --filter @limn/shapes test` |
+| Photo to diagram | **4/4** drawn primitives recovered with correct dimensions from a synthesised photo (perspective warp, illumination gradient, glare hotspot, sensor noise), in **~57 ms** | `cd apps/vision && pytest tests -q` |
+| Merge convergence | 5 simulated peers over 40 rounds of randomised delivery order, batching and replays. **No divergence**, no duplicates, no holes | `pnpm --filter @limn/protocol test` |
+| Access control | 14 assertions on RLS, share-link redemption and snapshot compare-and-swap, against real Postgres | `./supabase/tests/run.sh` |
 | Test suites | **52 tests** across TypeScript, Python and SQL | `pnpm test` |
 
 Realtime throughput and latency depend on your own Supabase project, so they are
@@ -74,18 +74,18 @@ Both were found by asserting a property rather than by reading the code, and bot
 are documented at the fix.
 
 **Discarding a tombstone for an unknown element breaks convergence.** It looks
-like an obvious optimisation — why store a delete for something you don't have —
-and it silently loses the delete. A peer that loaded a snapshot after the
+like an obvious optimisation. Why store a delete for something you don't have?
+But it silently loses the delete. A peer that loaded a snapshot after the
 deletion, then received a stale broadcast of the element from a peer who hadn't
 processed it yet, would resurrect the element permanently.
 [`reconcile.ts`](packages/protocol/src/reconcile.ts)
 
-**`rectFill` cannot separate a diamond from a rectangle.** A diamond's *minimal*
+**`rectFill` cannot separate a diamond from a rectangle.** A diamond's minimal
 enclosing rectangle is edge-aligned, not axis-aligned, so area-over-rect measures
-~0.75 rather than the textbook 0.5 and overlaps the rectangle case entirely.
-Replaced with a rotation-invariant test on the quadrilateral's diagonals. That
-plus switching score combination from a product to a weighted geometric mean took
-recognition from 65% to 95.8%. [`recognize.ts`](packages/shapes/src/recognize.ts)
+about 0.75 rather than the textbook 0.5 and overlaps the rectangle case entirely.
+Replaced with a rotation-invariant test on the quadrilateral's diagonals. That,
+plus switching score combination from a product to a weighted geometric mean,
+took recognition from 65% to 95.8%. [`recognize.ts`](packages/shapes/src/recognize.ts)
 
 ---
 
@@ -93,8 +93,8 @@ recognition from 65% to 95.8%. [`recognize.ts`](packages/shapes/src/recognize.ts
 
 ```
 apps/
-  web/          Next.js app — canvas, collab hook, AI routes        → Vercel
-  vision/       FastAPI + OpenCV — photo vectorisation, deep fit    → Render
+  web/          Next.js app: canvas, collab hook, AI routes         -> Vercel
+  vision/       FastAPI + OpenCV: photo vectorisation, deep fit     -> Render
 packages/
   protocol/     Broadcast events, merge rules, writer election
   shapes/       Geometry recogniser and alignment engine
@@ -105,7 +105,7 @@ scripts/
   loadtest.ts   Realtime load harness
 ```
 
-`packages/protocol` deliberately does not import Excalidraw: it is consumed by
+`packages/protocol` deliberately does not import Excalidraw. It is consumed by
 the Node load harness and must stay independent of the drawing SDK's release
 cadence. Sync only needs the four fields that drive conflict resolution.
 
@@ -130,15 +130,15 @@ pnpm dev        # web :3000, vision :8000
 ```
 
 In the Supabase dashboard, enable **Authentication → Sign In / Providers →
-Anonymous sign-ins**. That is the one dashboard toggle that matters — it is the
-entire onboarding path. Realtime private channels need no toggle; the migrations
+Anonymous sign-ins**. That is the one dashboard toggle that matters, and it is
+the entire onboarding path. Realtime private channels need no toggle; the migrations
 install the `realtime.messages` policies that authorize them.
 
-Step-by-step from nothing — including which dashboard toggles matter and a smoke
-test that isolates each subsystem — is in [docs/SETUP.md](docs/SETUP.md).
-Deployment reference, including the UptimeRobot keepalive that stops Render's
-free instance sleeping through a 50-second cold start, is in
-[docs/DEPLOY.md](docs/DEPLOY.md).
+[docs/SETUP.md](docs/SETUP.md) is the step-by-step from nothing, including which
+dashboard toggles matter and a smoke test that isolates each subsystem.
+[docs/DEPLOY.md](docs/DEPLOY.md) is the deployment reference, including the
+UptimeRobot keepalive that stops Render's free instance sleeping through a
+50-second cold start.
 Design decisions and the reasoning behind them are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -146,19 +146,19 @@ Design decisions and the reasoning behind them are in
 
 ## Notes on the stack
 
-**Excalidraw, not tldraw** — tldraw's licence renders a watermark.
+**Excalidraw, not tldraw.** tldraw's licence renders a watermark.
 
-**Supabase Realtime, not a socket server** — one less service to run, and the
+**Supabase Realtime, not a socket server.** One less service to run, and the
 Realtime authorization policies mean channel access is enforced by the same RLS
 that guards the tables. The cost is that there is no server-side hook, which is
 what makes the peer-side convergence work necessary.
 
-**Gemini returns an IR, not Excalidraw elements** — a scene needs `seed`,
+**Gemini returns an IR, not Excalidraw elements.** A scene needs `seed`,
 `versionNonce`, fractional `index`, `boundElements` cross-references and arrow
 binding focus/gap values to all agree. A language model produces something that
-*looks* right and renders as a pile of unbound arrows. The model gets a small
-vocabulary; a compiler does the bookkeeping.
+looks right and renders as a pile of unbound arrows. The model gets a small
+vocabulary and a compiler does the bookkeeping.
 
-**Layout is hand-written, not model-chosen** — a Sugiyama pass (break cycles,
-rank, barycentre ordering, coordinate assignment). Asking for coordinates gets
+**Layout is hand-written, not model-chosen.** A Sugiyama pass: break cycles,
+rank, barycentre ordering, coordinate assignment. Asking for coordinates gets
 overlaps, drift, and different results for identical requests.

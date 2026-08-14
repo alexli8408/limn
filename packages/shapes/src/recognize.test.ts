@@ -13,7 +13,7 @@ import type { Point } from "./vec.js";
  * "the shapes feel worse lately".
  */
 
-/** mulberry32 — small, fast, and good enough for jitter. */
+/** mulberry32, small, fast, and good enough for jitter. */
 function prng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {

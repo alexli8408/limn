@@ -32,7 +32,7 @@ export interface SnapshotWriter {
  *
  * Two timers, not one. The debounce keeps a continuous drag from issuing a write
  * per frame; the ceiling guarantees a save even if the user never stops drawing,
- * because a debounce alone can be starved indefinitely by steady input — exactly
+ * because a debounce alone can be starved indefinitely by steady input, exactly
  * what a long uninterrupted sketch looks like.
  *
  * Writes go through save_board_snapshot(), which compares the version we last

@@ -158,7 +158,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         : all.filter((el) => !el.isDeleted);
 
       if (target.length === 0) {
-        setAiRun({ state: "error", message: "Nothing to beautify — draw something first." });
+        setAiRun({ state: "error", message: "Nothing to beautify, draw something first." });
         return;
       }
 

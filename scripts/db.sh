@@ -16,7 +16,7 @@
 #     failed to connect to postgres: ... Connection terminated unexpectedly
 #
 # which reads like an auth or provisioning problem and is neither. It is
-# particularly likely behind a fake-IP proxy — Clash, Shadowrocket, sing-box —
+# particularly likely behind a fake-IP proxy, Clash, Shadowrocket, sing-box,
 # where every hostname resolves to a synthetic 198.18.x.x address and only the
 # proxied protocols actually reach anywhere. TCP still completes a handshake
 # against the local proxy, so even a port check looks healthy.
@@ -25,7 +25,7 @@
 # works in all of those situations. `supabase link` already caches its URL; this
 # just injects the password and hands it to the CLI.
 #
-# Port 5432 is session mode, which is what migrations need — transaction mode on
+# Port 5432 is session mode, which is what migrations need, transaction mode on
 # 6543 does not support the advisory locks and prepared statements the CLI uses.
 
 set -euo pipefail
@@ -40,7 +40,7 @@ fi
 
 if [[ ! -f "$POOLER_FILE" ]]; then
   echo "No cached pooler URL at supabase/.temp/pooler-url." >&2
-  echo "Run 'supabase link --project-ref <ref>' first — link writes it." >&2
+  echo "Run 'supabase link --project-ref <ref>' first, link writes it." >&2
   exit 1
 fi
 

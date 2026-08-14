@@ -7,7 +7,7 @@ import { VisionError, callVision } from "@/lib/vision";
  * Deep stroke fitting.
  *
  * The browser already snaps shapes locally within a frame; this is the pass for
- * strokes it declined — drawn in several overlapping passes, or self-crossing —
+ * strokes it declined, drawn in several overlapping passes, or self-crossing,
  * where OpenCV's fill-then-contour approach still reads the intent.
  */
 

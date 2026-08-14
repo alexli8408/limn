@@ -3,7 +3,7 @@ import { serverEnv } from "@/lib/env";
 import { geminiDiagramSchema, parseDiagram, type LimnDiagram } from "./schema";
 
 /**
- * Server-side Gemini access. Never import this from a client component — the
+ * Server-side Gemini access. Never import this from a client component, the
  * API key would end up in the browser bundle.
  */
 
@@ -129,8 +129,8 @@ async function generate(args: GenerateArgs): Promise<GenerateResult> {
 
 /**
  * Beautify a sketch. The rendered image carries the spatial relationships that a
- * flat element list does not — which arrow points at which box is obvious in a
- * picture and genuinely ambiguous in coordinates alone — so both are sent.
+ * flat element list does not, which arrow points at which box is obvious in a
+ * picture and genuinely ambiguous in coordinates alone, so both are sent.
  */
 export async function refineSketch(input: {
   elements: SketchElement[];

@@ -9,7 +9,7 @@ import { recordGeneration } from "@/lib/ai/usage";
  *
  * Returns a LimnDiagram, not Excalidraw elements. Compilation happens in the
  * browser because it calls `convertToExcalidrawElements`, which lives in the
- * canvas bundle — a package with DOM assumptions that has no business being
+ * canvas bundle, a package with DOM assumptions that has no business being
  * pulled into a serverless function.
  */
 

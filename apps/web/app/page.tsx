@@ -4,7 +4,7 @@ import { startDrawing } from "@/app/actions";
 import type { PlatformStats } from "@/lib/supabase/types";
 
 /**
- * Landing page. The counters are real numbers out of Postgres, not decoration —
+ * Landing page. The counters are real numbers out of Postgres, not decoration,
  * they are the same aggregates the README quotes.
  */
 
@@ -17,7 +17,7 @@ const FEATURES = [
   },
   {
     title: "Strokes that snap",
-    body: "A freehand stroke is classified and replaced in the same frame the pen lifts. 95.8% accurate over a 600-stroke benchmark, and it declines rather than guess — one Ctrl+Z gets your wobble back.",
+    body: "A freehand stroke is classified and replaced in the same frame the pen lifts. 95.8% accurate over a 600-stroke benchmark, and it declines rather than guess, one Ctrl+Z gets your wobble back.",
   },
   {
     title: "Photo to diagram",
@@ -25,7 +25,7 @@ const FEATURES = [
   },
   {
     title: "Beautify, not rewrite",
-    body: "Gemini reads the sketch and returns structure, never raw scene JSON. A deterministic compiler places it — so your arrangement survives, and arrows are genuinely bound.",
+    body: "Gemini reads the sketch and returns structure, never raw scene JSON. A deterministic compiler places it, so your arrangement survives, and arrows are genuinely bound.",
   },
 ];
 
@@ -62,7 +62,7 @@ export default async function LandingPage() {
 
       <p className="mt-5 max-w-xl text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
         Sketch with anyone, in realtime. Rough strokes become clean shapes as you
-        draw, and a whole messy sketch can be redrawn as a proper diagram —
+        draw, and a whole messy sketch can be redrawn as a proper diagram,
         without changing what you meant by it.
       </p>
 

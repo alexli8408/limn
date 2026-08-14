@@ -2,8 +2,8 @@
 
 The vectorisation test synthesises a whiteboard photograph rather than committing
 a fixture image: it draws a known diagram, then applies the things that actually
-break the pipeline in the field — a perspective warp, an illumination gradient, a
-glare hotspot and sensor noise — so a regression in any one stage is visible, and
+break the pipeline in the field, a perspective warp, an illumination gradient, a
+glare hotspot and sensor noise, so a regression in any one stage is visible, and
 the expected output is known exactly.
 """
 
@@ -187,7 +187,7 @@ def synthesise_photo() -> tuple[np.ndarray, int]:
         board, cv2.getPerspectiveTransform(src, dst), (w, h), borderValue=(120, 120, 120)
     )
 
-    # Illumination gradient plus a glare hotspot — the reason a global threshold
+    # Illumination gradient plus a glare hotspot, the reason a global threshold
     # cannot work and adaptiveThreshold is used instead.
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     gradient = 0.72 + 0.28 * (xx / w) + 0.14 * (1.0 - yy / h)
@@ -254,7 +254,7 @@ def test_skeleton_tracing_resolves_t_junctions() -> None:
     This is the case the tracer is built around. The connector lands on the side
     of each box, making a T; the box's side has to be reunited across that T
     while the connector stays a separate element. Getting it wrong is not subtle
-    in either direction — either every box arrives as four loose sides, or the
+    in either direction, either every box arrives as four loose sides, or the
     whole diagram arrives as one polyline.
     """
     canvas = np.zeros((400, 900), dtype=np.uint8)
@@ -277,7 +277,7 @@ def test_skeleton_tracing_resolves_t_junctions() -> None:
     # together through the connector.
     for p in paths:
         span = float(p[:, 0].max() - p[:, 0].min())
-        assert span < 800, f"a single stroke spans {span:.0f}px — shapes were fused"
+        assert span < 800, f"a single stroke spans {span:.0f}px, shapes were fused"
 
 
 def test_skeleton_tracing_keeps_a_lone_loop_whole() -> None:

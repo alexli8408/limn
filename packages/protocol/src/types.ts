@@ -13,7 +13,7 @@ export interface SyncMeta {
   version: number;
   /** Random tiebreaker for concurrent edits that landed on the same version. */
   versionNonce: number;
-  /** Wall-clock ms of the last mutation. Advisory only — never trusted for ordering. */
+  /** Wall-clock ms of the last mutation. Advisory only, never trusted for ordering. */
   updated?: number;
   /** Excalidraw tombstones rather than removing, so deletes converge like any edit. */
   isDeleted?: boolean;
@@ -25,7 +25,7 @@ export type Role = "owner" | "editor" | "viewer";
 
 /**
  * What each peer publishes into the Realtime presence map. Keyed by `peerId`,
- * which is per-tab rather than per-user — one person with two tabs open is two
+ * which is per-tab rather than per-user, one person with two tabs open is two
  * peers, and both need distinct cursors.
  */
 export interface PeerState {
@@ -37,7 +37,7 @@ export interface PeerState {
   role: Role;
   /** True when the peer authenticated anonymously (the frictionless demo path). */
   guest: boolean;
-  /** Client clock at channel subscribe. Drives writer election — see election.ts. */
+  /** Client clock at channel subscribe. Drives writer election, see election.ts. */
   joinedAt: number;
 }
 

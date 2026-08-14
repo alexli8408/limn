@@ -76,7 +76,7 @@ def _gauss(x: float, mu: float, sigma: float) -> float:
 
 
 def _combine(*factors: tuple[float, float]) -> float:
-    """Weighted geometric mean — see the note in packages/shapes/src/score.ts.
+    """Weighted geometric mean, see the note in packages/shapes/src/score.ts.
 
     A plain product of five plausible-looking factors lands around 0.4, which
     sits under any sensible threshold and makes the fitter refuse everything.
@@ -377,7 +377,7 @@ def _fold_rect(w: float, h: float, angle_deg: float) -> tuple[float, float, floa
     cv2.minAreaRect reports angles in [0°, 90°), so an axis-aligned box often
     comes back as "rotated 90° with the sides exchanged". Snapping that angle to
     zero without exchanging them back yields a box with its width and height
-    transposed — a 300×150 rectangle placed as 150×300.
+    transposed, a 300×150 rectangle placed as 150×300.
     """
     angle = math.radians(angle_deg) % math.pi
     if angle >= math.pi / 2:

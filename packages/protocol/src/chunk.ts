@@ -3,7 +3,7 @@ import type { SyncElement } from "./types.js";
 
 /**
  * Realtime drops frames larger than its configured payload ceiling, and it does
- * so silently from the sender's point of view — the update simply never arrives.
+ * so silently from the sender's point of view, the update simply never arrives.
  * Pasting a large diagram or running an AI recompose can easily produce a delta
  * in the megabytes, so anything oversized is split here and reassembled by the
  * receiver.
@@ -20,7 +20,7 @@ let chunkCounter = 0;
  * Greedily packs elements into frames under `maxBytes`.
  *
  * A single element bigger than the budget (a freedraw stroke with tens of
- * thousands of points, say) still gets its own frame — splitting *inside* an
+ * thousands of points, say) still gets its own frame, splitting *inside* an
  * element would break the atomicity reconciliation depends on. Those are rare
  * and Realtime's real ceiling sits comfortably above our conservative budget.
  */
@@ -57,8 +57,8 @@ interface PendingGroup {
 }
 
 /**
- * Reassembles chunked deltas. Groups that never complete — a peer that
- * disconnected mid-send — are evicted on the next call rather than by a timer,
+ * Reassembles chunked deltas. Groups that never complete, a peer that
+ * disconnected mid-send, are evicted on the next call rather than by a timer,
  * so an idle board costs nothing.
  */
 export class ChunkAssembler {

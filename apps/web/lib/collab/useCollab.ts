@@ -239,8 +239,8 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     const channel = channelRef.current;
     if (!channel) return;
 
-    // Viewers cannot broadcast — the Realtime insert policy only lets them touch
-    // presence — so their cursor rides along in presence state instead.
+    // Viewers cannot broadcast, the Realtime insert policy only lets them touch
+    // presence, so their cursor rides along in presence state instead.
     if (role === "viewer") {
       void channel.track(cursorPresence(cursor));
       return;
@@ -294,7 +294,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
 
     sceneRef.current = elements;
     lastFingerprint.current = sceneFingerprint(elements);
-    // Remote elements are already accounted for as "sent" — echoing them back to
+    // Remote elements are already accounted for as "sent", echoing them back to
     // the peer that authored them would loop forever.
     for (const el of incoming) sentVersions.current.set(el.id, el.version);
     if (isWriterRef.current) snapshots.mark(elements);

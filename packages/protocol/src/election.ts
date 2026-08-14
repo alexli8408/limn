@@ -11,7 +11,7 @@ import type { PeerState } from "./types.js";
  * arrives at the same answer with no extra round trips:
  *
  *   1. viewers are ineligible (they cannot write, RLS would reject them anyway)
- *   2. earliest `joinedAt` wins — the peer most likely to hold the fullest scene
+ *   2. earliest `joinedAt` wins, the peer most likely to hold the fullest scene
  *   3. ties break on `peerId`, lexicographically
  *
  * Presence propagation is not instantaneous, so two peers can briefly both

@@ -18,7 +18,7 @@ export const mean = (xs: readonly number[]): number =>
   xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length;
 
 /**
- * Weighted geometric mean of soft scores — a "soft AND".
+ * Weighted geometric mean of soft scores, a "soft AND".
  *
  * The obvious combinator is a plain product, but products collapse: five
  * factors each at a perfectly respectable 0.85 multiply out to 0.44, so every
@@ -88,7 +88,7 @@ export function polygonDeviation(
  * RDP is a distance criterion, so a hand tremor part-way along an edge can
  * exceed epsilon and register as a "corner". A rectangle then reports five
  * vertices, fails the quadrilateral tests, and falls through to the generic
- * polygon bucket — which was the single largest error source in the benchmark.
+ * polygon bucket, which was the single largest error source in the benchmark.
  *
  * Two passes fix it: fuse vertices that are too close together to be distinct
  * corners, then repeatedly drop the straightest remaining vertex while it is
@@ -169,8 +169,8 @@ export interface QuadDiagonals {
  * Diamond test, expressed in a rotation-invariant way.
  *
  * A diamond is a quadrilateral whose diagonals are perpendicular and bisect
- * each other. Testing that directly — rather than checking whether corners land
- * on the midpoints of some axis-aligned box — means a diamond drawn at 30°
+ * each other. Testing that directly, rather than checking whether corners land
+ * on the midpoints of some axis-aligned box, means a diamond drawn at 30°
  * classifies exactly as well as one drawn flat.
  */
 export function quadDiagonals(quad: readonly Point[], diagonal: number): QuadDiagonals | null {

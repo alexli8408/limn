@@ -7,7 +7,7 @@ import type { Box } from "./vec.js";
  * Recognising each stroke in isolation gets you clean shapes that still sit at
  * slightly different heights and differ by a few pixels in size. What actually
  * reads as "drawn by a designer" is *agreement between* shapes: shared
- * baselines, matching sizes, even gaps. None of that needs a model — it is
+ * baselines, matching sizes, even gaps. None of that needs a model, it is
  * one-dimensional clustering.
  */
 
@@ -56,7 +56,7 @@ export interface AlignOptions {
 
 export interface AlignResult {
   boxes: Box[];
-  /** Indices whose geometry actually moved — the caller only reflows those. */
+  /** Indices whose geometry actually moved, the caller only reflows those. */
   moved: number[];
   rows: number;
   columns: number;
@@ -167,7 +167,7 @@ export function alignBoxes(input: readonly Box[], options: AlignOptions = {}): A
 }
 
 /**
- * Equalises the gaps within one row or column — but only when they are already
+ * Equalises the gaps within one row or column, but only when they are already
  * close to even. Forcing uniform spacing on a deliberately clustered layout
  * destroys grouping the user meant to express.
  */

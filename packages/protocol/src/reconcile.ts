@@ -5,8 +5,8 @@ import type { SyncElement } from "./types.js";
  *
  * Excalidraw already stamps every element with a monotonically increasing
  * `version` plus a random `versionNonce`. That pair is enough to make merges
- * *commutative, associative and idempotent* — i.e. every replica converges on
- * the same scene regardless of the order updates arrive in — without shipping a
+ * *commutative, associative and idempotent*, i.e. every replica converges on
+ * the same scene regardless of the order updates arrive in, without shipping a
  * full CRDT runtime alongside the drawing SDK.
  *
  * The ordering is a total order on (version, versionNonce):
@@ -26,7 +26,7 @@ export function remoteWins(local: SyncElement | undefined, remote: SyncElement):
 export interface ReconcileOptions {
   /**
    * Elements the local user is actively manipulating. A remote update to one of
-   * these is held back for a frame rather than applied mid-drag — without this,
+   * these is held back for a frame rather than applied mid-drag, without this,
    * a peer's stale echo yanks the shape out from under the cursor.
    */
   localHeldIds?: ReadonlySet<string>;
@@ -55,7 +55,7 @@ export function reconcile(
   // when a batch contains two updates to the same *new* id, the second lookup
   // finds an index that has been reserved but not yet written, so the write
   // lands past the end of the array. The result is a sparse array and a
-  // duplicated element — which is exactly what a chunked delta or a large paste
+  // duplicated element, which is exactly what a chunked delta or a large paste
   // produces in practice.
   const byId = new Map<string, SyncElement>();
   const order: string[] = [];
@@ -74,7 +74,7 @@ export function reconcile(
     const current = byId.get(incoming.id);
     if (!remoteWins(current, incoming)) continue;
 
-    // Never seen — take it, *including* tombstones.
+    // Never seen, take it, *including* tombstones.
     //
     // Dropping a tombstone for an unknown element looks like an obvious
     // optimisation and destroys convergence. A delete can legitimately arrive

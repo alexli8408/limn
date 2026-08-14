@@ -18,7 +18,7 @@ import {
  * Convergence tests.
  *
  * With no authoritative server, "every peer ends up with the same scene" is not
- * something the architecture gives us — it is a property of the merge function
+ * something the architecture gives us, it is a property of the merge function
  * that has to actually hold. These tests assert it directly, by delivering the
  * same set of edits to several simulated peers in randomised orders and
  * requiring identical results, rather than by inspecting the merge rule and
@@ -64,7 +64,7 @@ test("the merge order is a strict total order", () => {
   // Higher version always wins, regardless of nonce.
   assert.equal(remoteWins(el("a", 1, 999), el("a", 2, 0)), true);
   assert.equal(remoteWins(el("a", 2, 0), el("a", 1, 999)), false);
-  // On a tie the lower nonce wins — arbitrary, but identical everywhere.
+  // On a tie the lower nonce wins, arbitrary, but identical everywhere.
   assert.equal(remoteWins(el("a", 2, 500), el("a", 2, 400)), true);
   assert.equal(remoteWins(el("a", 2, 400), el("a", 2, 500)), false);
   // Antisymmetry: never both.
@@ -84,7 +84,7 @@ test("peers converge under randomised delivery orders", () => {
 
   for (let round = 0; round < ROUNDS; round++) {
     // A pool of concurrent edits, including several that collide on the same
-    // (id, version) with different nonces — the case that actually matters.
+    // (id, version) with different nonces, the case that actually matters.
     const ops: SyncElement[] = [];
     const ids = ["a", "b", "c", "d", "e"];
     for (const id of ids) {
@@ -106,7 +106,7 @@ test("peers converge under randomised delivery orders", () => {
     for (let peer = 0; peer < PEERS; peer++) {
       let scene: SyncElement[] = [];
       // Deliver in a fresh random order, in randomly sized batches, and replay
-      // a slice of them — a reconnecting peer really does see duplicates.
+      // a slice of them, a reconnecting peer really does see duplicates.
       const delivery = shuffle(ops, rand);
       const withReplays = [...delivery, ...shuffle(delivery.slice(0, 5), rand)];
 
@@ -127,7 +127,7 @@ test("peers converge under randomised delivery orders", () => {
         );
         assert.ok(
           scene.every((e) => e !== undefined),
-          `round ${round}: sparse array — a write landed past the end`,
+          `round ${round}: sparse array, a write landed past the end`,
         );
       }
       results.push(normalise(scene));
@@ -339,7 +339,7 @@ test("a single-chunk delta bypasses the assembler entirely", () => {
 
 test("two updates to the same new id in one batch do not duplicate it", () => {
   // Regression: an index-based merge reserves a slot for the first, then the
-  // second lookup writes past the end of the array — yielding a hole and a
+  // second lookup writes past the end of the array, yielding a hole and a
   // duplicate. A chunked delta or a large paste produces exactly this shape.
   const { elements } = reconcile(
     [],

@@ -8,8 +8,8 @@ import { z } from "zod";
  * and arrow binding focus/gap values to all agree, and a language model will
  * produce something that *looks* right and renders as a pile of unbound arrows.
  *
- * So the model is given a much smaller vocabulary — nodes, edges, labels,
- * grouping — and a deterministic compiler turns that into a valid scene. The
+ * So the model is given a much smaller vocabulary, nodes, edges, labels,
+ * grouping, and a deterministic compiler turns that into a valid scene. The
  * model does the part it is good at (reading intent out of a sketch) and none of
  * the part it is bad at (bookkeeping).
  */

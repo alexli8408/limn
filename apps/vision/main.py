@@ -113,7 +113,7 @@ async def lifespan(_: FastAPI):
         "on" if API_KEY else "OFF",
     )
     if not API_KEY:
-        log.warning("VISION_API_KEY is unset — every endpoint is publicly callable")
+        log.warning("VISION_API_KEY is unset, every endpoint is publicly callable")
     yield
 
 
@@ -152,7 +152,7 @@ Guard = Annotated[None, Depends(require_key)]
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Unauthenticated on purpose — this is UptimeRobot's keepalive target."""
+    """Unauthenticated on purpose, this is UptimeRobot's keepalive target."""
     return HealthResponse(
         status="ok",
         service="limn-vision",
@@ -260,6 +260,6 @@ def vectorize_image(payload: VectorizeRequest, _: Guard) -> VectorizeResponse:
 @app.get("/", include_in_schema=False)
 def root() -> Response:
     return Response(
-        content=f"limn-vision {__version__} — see /docs",
+        content=f"limn-vision {__version__}, see /docs",
         media_type="text/plain",
     )

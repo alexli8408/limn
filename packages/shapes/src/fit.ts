@@ -42,7 +42,7 @@ export interface LineFit {
  * Total-least-squares line fit.
  *
  * Ordinary least squares minimises vertical error, which makes it useless
- * here — it degenerates completely on a vertical stroke, and a vertical stroke
+ * here, it degenerates completely on a vertical stroke, and a vertical stroke
  * is exactly what someone drawing a flowchart edge produces.
  */
 export function fitLine(points: readonly Point[]): LineFit {
@@ -93,7 +93,7 @@ export interface CircleFit {
 /**
  * Kåsa algebraic circle fit: minimising (x² + y² + Dx + Ey + F)² makes the
  * problem linear, which keeps this at a handful of microseconds. The known
- * bias toward small radii on short arcs is irrelevant — a stroke that only
+ * bias toward small radii on short arcs is irrelevant, a stroke that only
  * covers a short arc will not be classified as a closed shape anyway.
  */
 export function fitCircle(points: readonly Point[]): CircleFit {
@@ -142,7 +142,7 @@ export interface EllipseFit {
   ry: number;
   /** Radians; `rx` runs along this direction. */
   angle: number;
-  /** Mean |‖(u/rx, v/ry)‖ − 1| — dimensionless, so it compares across scales. */
+  /** Mean |‖(u/rx, v/ry)‖ − 1|, dimensionless, so it compares across scales. */
   residual: number;
 }
 

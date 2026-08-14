@@ -76,7 +76,7 @@ export function estimateNodeSize(
  * Reverses the back edges of a DFS so the graph becomes acyclic.
  *
  * Ranking assumes a DAG and a cyclic input would not terminate. The reversal is
- * only used for positioning — the edge is still drawn in its original direction,
+ * only used for positioning, the edge is still drawn in its original direction,
  * so a cycle in the user's diagram still reads as a cycle.
  */
 function breakCycles(
@@ -150,7 +150,7 @@ function assignRanks(
 
 /**
  * Barycentre ordering. Repeatedly moves each node to the average position of its
- * neighbours in the adjacent rank, alternating sweep direction — the standard
+ * neighbours in the adjacent rank, alternating sweep direction, the standard
  * heuristic for edge-crossing reduction, and enough for diagram-sized graphs.
  */
 function orderWithinRanks(
@@ -234,7 +234,7 @@ export function layoutDiagram(
   const rank = assignRanks(ids, acyclic);
 
   // An explicit rank from the model overrides the computed one, but only if it
-  // does not invert an edge — otherwise arrows would point back up the flow.
+  // does not invert an edge, otherwise arrows would point back up the flow.
   for (const node of nodes) {
     if (node.rank !== undefined) rank.set(node.id, node.rank);
   }

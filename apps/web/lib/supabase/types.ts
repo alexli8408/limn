@@ -59,14 +59,14 @@ export type PlatformStats = {
 /**
  * Every row type above is a `type` alias, never an `interface`, and that is
  * load-bearing. postgrest-js constrains `Row` to `Record<string, unknown>`, and
- * TypeScript only synthesises an implicit index signature for type aliases —
+ * TypeScript only synthesises an implicit index signature for type aliases,
  * an interface never satisfies it. Declare `BoardRow` as an interface and the
  * whole schema silently fails `extends GenericSchema`, which resolves `Schema`
  * to `never`; every `.from()` then yields `never` and every `.rpc()` reports its
  * argument as unassignable to `undefined`. The errors all point at call sites,
  * none of them at the real cause.
  *
- * postgrest-js also requires `Relationships` on every table entry — it is part of its
+ * postgrest-js also requires `Relationships` on every table entry, it is part of its
  * GenericTable contract, and omitting it makes the table resolve to `never`, so
  * every query against it fails to typecheck with an error pointing at the call
  * site rather than at this file. Empty is correct: we never use the

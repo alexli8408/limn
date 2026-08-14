@@ -54,8 +54,8 @@ export function rdp(points: readonly Point[], epsilon: number): Point[] {
 
 /**
  * Arc-length resampling to exactly `count` points. Recognition metrics compare
- * strokes drawn at wildly different speeds — a fast flick and a slow trace of
- * the same circle carry very different point densities — and every angular
+ * strokes drawn at wildly different speeds, a fast flick and a slow trace of
+ * the same circle carry very different point densities, and every angular
  * measure is meaningless until that is normalised away.
  */
 export function resample(points: readonly Point[], count: number): Point[] {

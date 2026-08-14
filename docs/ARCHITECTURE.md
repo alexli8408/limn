@@ -28,7 +28,7 @@ So the split is:
 
 `board_snapshots` is granted `SELECT` only. Writes go exclusively through
 `save_board_snapshot()`, which is what makes its version check impossible to
-route around — a policy alone would still let a client `UPDATE` the row directly
+route around. A policy alone would still let a client `UPDATE` the row directly
 and skip the concurrency logic.
 
 ---
@@ -37,12 +37,12 @@ and skip the concurrency logic.
 
 Excalidraw already stamps every element with a monotonic `version` and a random
 `versionNonce`. That pair is enough for a merge that is **commutative,
-associative and idempotent** — every replica reaches the same scene regardless of
-delivery order — without shipping a CRDT runtime alongside the canvas.
+associative and idempotent**, so every replica reaches the same scene regardless
+of delivery order, without shipping a CRDT runtime alongside the canvas.
 
 The order is total on `(version, versionNonce)`: higher version wins; on a tie the
-lower nonce wins. Ties are common — two peers dragging the same shape both bump
-41 → 42 — and picking the lower nonce is arbitrary but *identical everywhere*,
+lower nonce wins. Ties are common, since two peers dragging the same shape both
+bump 41 to 42. Picking the lower nonce is arbitrary but identical everywhere,
 which is the only property that matters.
 
 ### The tombstone trap
@@ -54,21 +54,21 @@ Discarding it is the intuitive choice. It also breaks convergence:
 
 1. P1 deletes X and broadcasts the tombstone.
 2. P3 joins, loads a snapshot that already excludes X, and receives the
-   tombstone — for an element it does not have. Discards it.
+   tombstone for an element it does not have, and discards it.
 3. P2, who has not processed the delete yet, broadcasts X at version 5.
 4. P3 has no record of the deletion, so it accepts X. **X is back, permanently.**
 
 Retaining the tombstone fixes it. `pruneTombstones()` bounds the memory cost with
 a TTL. This is asserted in
-[`reconcile.test.ts`](../packages/protocol/src/reconcile.test.ts) — it was found
+[`reconcile.test.ts`](../packages/protocol/src/reconcile.test.ts). It was found
 by the randomised-order convergence test, not by reading the code.
 
 ### The other bug in the same function
 
 The first implementation indexed into the output array, reserving a slot for each
-newly seen id. When one batch contained two updates to the same *new* id — which
-is exactly what a chunked delta or a large paste produces — the second write
-landed past the end of the array, producing a sparse array with a duplicated
+newly seen id. When one batch contained two updates to the same new id, which is
+exactly what a chunked delta or a large paste produces, the second write landed
+past the end of the array. The result was a sparse array with a duplicated
 element.
 
 By value the scene still looked converged, which is why the property test now
@@ -84,7 +84,7 @@ No server means no obvious place for the autosave timer. Rather than run a
 dedicated process, the peers elect one of themselves from the presence map:
 
 1. Viewers are ineligible (RLS would reject their write anyway).
-2. Earliest `joinedAt` wins — most likely to hold the fullest scene.
+2. Earliest `joinedAt` wins, since that peer most likely holds the fullest scene.
 3. Ties break on `peerId`, lexicographically.
 
 That is a pure function of presence state, so every peer computes the same answer
@@ -103,8 +103,8 @@ The writer holds a debounce *and* a ceiling:
 - The debounce (4 s) stops a continuous drag from issuing a write per frame.
 - The ceiling (20 s) guarantees a save even if input never pauses.
 
-A debounce alone can be starved indefinitely by steady input — which is precisely
-what a long, uninterrupted sketch looks like.
+A debounce alone can be starved indefinitely by steady input, which is what a
+long uninterrupted sketch looks like.
 
 ---
 
@@ -121,8 +121,8 @@ anything newer. Having every peer answer would send one full scene per peer.
 
 The Realtime insert policy is split by extension:
 
-- `presence` — anyone who can read the board
-- `broadcast` — only editors
+- `presence`: anyone who can read the board
+- `broadcast`: editors only
 
 A read-only collaborator could never *persist* elements (`save_board_snapshot`
 checks `can_edit_board`), but without this split they could still inject them
@@ -159,16 +159,16 @@ area is 1.0 for a rectangle and, per the textbook, 0.5 for a diamond. It measure
 ~0.75. The reason: a diamond's *minimal* enclosing rectangle is edge-aligned, not
 axis-aligned, so the ratio depends on the diamond's aspect and overlaps the
 rectangle case entirely. Replaced with a rotation-invariant test on the
-quadrilateral's diagonals — perpendicular and mutually bisecting.
+quadrilateral's diagonals: perpendicular and mutually bisecting.
 
 **Scores must combine as a weighted geometric mean, not a product.** Five factors
 at a perfectly respectable 0.85 multiply out to 0.44, which put every shape under
 threshold and made the recogniser refuse to fire at all. This was the difference
 between 65% and 87%.
 
-A corner-refinement pass — fusing the tremor artefacts RDP reports as spurious
-vertices — took it from 87% to **95.8%**. The remaining misses are near-squares,
-where "rectangle" and "diamond" are genuinely the same shape.
+A corner-refinement pass, fusing the tremor artefacts RDP reports as spurious
+vertices, took it from 87% to **95.8%**. The remaining misses are near-squares,
+where "rectangle" and "diamond" are the same shape.
 
 ---
 
@@ -191,8 +191,8 @@ illumination gradient and glare hotspots. Any single threshold either loses
 strokes in the shadowed corner or turns the glare into ink.
 
 **Thin before tracing.** `findContours` on thresholded ink returns the *outline of
-the marker stroke* — a rectangle comes back as two nested rings and neither is the
-rectangle. Thinning to the centreline is what makes the output editable.
+the marker stroke*. A rectangle comes back as two nested rings and neither one is
+the rectangle. Thinning to the centreline is what makes the output editable.
 
 **Prune the skeleton.** Zhang-Suen is one pixel wide but not topologically clean.
 On a plain 360×220 ellipse it leaves **311 pixels of 930** with three
@@ -200,8 +200,8 @@ On a plain 360×220 ellipse it leaves **311 pixels of 930** with three
 junctions that do not exist and the ellipse arrives in twenty pieces. Deleting
 pixels that carry no connectivity takes it to zero.
 
-The connectivity number is *not* the fix — it fails the other way. Where a branch
-leaves diagonally beside another, two branches merge into one ring run: a real T
+The connectivity number is not the fix. It fails the other way: where a branch
+leaves diagonally beside another, two branches merge into one ring run. A real T
 in the test image measures degree 3 but connectivity 2, so the tracer walks
 straight through it and chains every shape on the board into one polyline.
 
@@ -213,9 +213,9 @@ Dilating the junction mask before labelling collapses each clump to one node, an
 only then is the branch count at a node meaningful.
 
 **Assemble with one decision per node.** Two branches is a corner the thinning
-split — join outright, since a corner is a 90° turn and any continuity test would
-reject exactly the case being repaired. Three or more is a real junction — join
-only the straightest through-pair, which reunites a box's side across the
+split, so join outright. A corner is a 90 degree turn, and any continuity test
+would reject the case being repaired. Three or more is a real junction, so join
+only the straightest through-pair. That reunites a box's side across the
 connector landing on it while leaving the connector its own element.
 
 ---
@@ -227,24 +227,24 @@ Gemini never returns Excalidraw elements.
 A scene needs `seed`, `versionNonce`, fractional `index`, `boundElements`
 cross-references and arrow binding `focus`/`gap` values to all agree. A language
 model produces something that looks right and renders as a pile of unbound
-arrows — arrows that appear attached until the first time anything moves.
+arrows. They appear attached until the first time anything moves.
 
 So the model gets a much smaller vocabulary (`LimnDiagram`: nodes, edges, labels,
 grouping) under constrained decoding via `responseSchema`, and a deterministic
-compiler turns that into a scene through `convertToExcalidrawElements` — the
-skeleton API Excalidraw publishes for precisely this, which handles all of the
-bookkeeping including bindings.
+compiler turns that into a scene through `convertToExcalidrawElements`, the
+skeleton API Excalidraw publishes for this, which handles all of the bookkeeping
+including bindings.
 
 The model does the part it is good at (reading intent out of a sketch) and none of
 the part it is bad at.
 
 ### Same intent means same arrangement
 
-In `preserve` mode — the default for cleaning up a sketch — each node keeps the
-bounding box of whatever the user actually drew for it, identified by the
-`sourceIds` the model reports. Only sizes and alignment change, via 1-D
-clustering that snaps shared baselines, equalises near-equal sizes and evens gaps
-that are already close to even.
+In `preserve` mode, the default for cleaning up a sketch, each node keeps the
+bounding box of whatever the user drew for it, identified by the `sourceIds` the
+model reports. Only sizes and alignment change, via 1-D clustering that snaps
+shared baselines, equalises near-equal sizes and evens gaps that are already
+close to even.
 
 That last qualifier matters: forcing uniform spacing on a deliberately clustered
 layout destroys grouping the user meant to express.
@@ -276,10 +276,10 @@ a busy board that is the difference between shipping the whole scene 30×/s and
 shipping the two shapes that moved.
 
 Frames above the broadcast size ceiling are split and reassembled by `gid`.
-Realtime drops oversized frames silently from the sender's point of view — the
-update simply never arrives — and an AI recompose or a large paste easily exceeds
-it. A single element larger than the budget still gets its own frame: splitting
-*inside* an element would break the atomicity the merge depends on.
+Realtime drops oversized frames silently from the sender's point of view, so the
+update never arrives, and an AI recompose or a large paste easily exceeds it. A
+single element larger than the budget still gets its own frame. Splitting inside
+an element would break the atomicity the merge depends on.
 
 ---
 
@@ -287,7 +287,7 @@ it. A single element larger than the budget still gets its own frame: splitting
 
 Realtime authorizes a peer onto a topic and then fans out whatever JSON that peer
 sends. There is no server to sanitise anything. So every broadcast payload is
-parsed with zod at the receive boundary before it goes near scene state — a
+parsed with zod at the receive boundary before it goes near scene state. A
 compromised or merely out-of-date client must not be able to corrupt a board for
 everyone else.
 

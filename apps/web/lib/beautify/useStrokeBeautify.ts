@@ -9,7 +9,7 @@ import type { SyncElement } from "@limn/protocol";
  * Live stroke beautification.
  *
  * Runs entirely in the browser and entirely synchronously. This has to land in
- * the same frame the pen lifts — a shape that snaps 200 ms later reads as the
+ * the same frame the pen lifts, a shape that snaps 200 ms later reads as the
  * canvas fighting the user rather than helping them, which is why the OpenCV
  * service is not on this path. That service handles the harder cases the local
  * recogniser declines, on explicit request.
@@ -81,7 +81,7 @@ function buildReplacement(
 
   // A recognised open path becomes a line/arrow; a closed one becomes a
   // container. Triangles and polygons have no primitive of their own, so they
-  // are closed `line` elements — which is what Excalidraw's own tooling produces.
+  // are closed `line` elements, which is what Excalidraw's own tooling produces.
   const skeleton: Record<string, unknown> =
     kind === "line" || kind === "arrow" || kind === "triangle" || kind === "polygon"
       ? {
@@ -129,7 +129,7 @@ export function useStrokeBeautify(options: BeautifyOptions) {
 
   /**
    * Called on every scene change. Beautification is triggered by the pen
-   * *lifting*, detected as `appState.newElement` going from set to null — not by
+   * *lifting*, detected as `appState.newElement` going from set to null, not by
    * a debounce, which would fire mid-stroke on any pause.
    */
   const onSceneChange = useCallback(

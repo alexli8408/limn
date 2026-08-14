@@ -32,7 +32,7 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
     redirect(`/?next=${encodeURIComponent(next)}`);
   }
 
-  // A share token grants nothing until it is redeemed for a collaborator row —
+  // A share token grants nothing until it is redeemed for a collaborator row,
   // RLS cannot see a token held by the browser. Redeeming is idempotent.
   if (shareToken) {
     const { error } = await supabase.rpc("claim_board_access", {

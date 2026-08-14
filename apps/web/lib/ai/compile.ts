@@ -12,7 +12,7 @@ import type { LimnDiagram } from "./schema";
  * Everything goes through `convertToExcalidrawElements`, which takes the
  * "skeleton" form Excalidraw publishes for exactly this purpose. It is what
  * generates seeds, version nonces, fractional indices, bound text containers and
- * — critically — arrow bindings with correct focus and gap. Hand-building
+ *, critically, arrow bindings with correct focus and gap. Hand-building
  * elements to avoid the dependency means reimplementing all of that, and the
  * failure mode is arrows that look attached until the first time something moves.
  */

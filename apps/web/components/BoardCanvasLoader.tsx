@@ -6,7 +6,7 @@ import type { BoardCanvasProps } from "./BoardCanvas";
 /**
  * Keeps the entire canvas module graph off the server.
  *
- * A `"use client"` component is still server-rendered — the directive marks a
+ * A `"use client"` component is still server-rendered, the directive marks a
  * hydration boundary, not a browser-only one. So marking BoardCanvas as a client
  * component is not enough on its own: importing it from a server component
  * evaluates `@excalidraw/excalidraw` (and everything reaching it, including the

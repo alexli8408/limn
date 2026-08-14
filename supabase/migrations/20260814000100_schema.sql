@@ -3,8 +3,8 @@
 -- Design note: there is no application server. The Next.js app is served from
 -- Vercel's edge and sync runs over Supabase Realtime, which is a fan-out pipe
 -- with no hook to run code in. That makes Postgres the only place a rule can be
--- enforced for everyone, so anything that must not be client-overridable —
--- access control, snapshot concurrency, usage accounting — is implemented here
+-- enforced for everyone, so anything that must not be client-overridable,
+-- access control, snapshot concurrency, usage accounting, is implemented here
 -- as RLS or as a SECURITY DEFINER function, never in TypeScript.
 
 create extension if not exists "pgcrypto";

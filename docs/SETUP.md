@@ -8,7 +8,7 @@ made rather than three steps later.
 
 ---
 
-## Phase 0 — Tools
+## Phase 0. Tools
 
 You already have Node 22 and pnpm 11. You need two more.
 
@@ -28,7 +28,7 @@ Accounts you'll need, all free: [Supabase](https://supabase.com),
 
 ---
 
-## Phase 1 — The code runs before anything is configured
+## Phase 1. The code runs before anything is configured
 
 ```bash
 cd ~/limn
@@ -39,18 +39,18 @@ pnpm build:packages
 Prove the parts that don't need credentials actually work:
 
 ```bash
-pnpm --filter @limn/protocol test    # 20 tests — convergence properties
-pnpm --filter @limn/shapes test      # 5 tests — prints the 95.8% benchmark
+pnpm --filter @limn/protocol test    # 20 tests, convergence properties
+pnpm --filter @limn/shapes test      # 5 tests, prints the 95.8% benchmark
 ```
 
 > **Check:** both report `fail 0`, and the shapes run prints
 > `recognition: 95.8% over 600 strokes`.
 
-If this fails, stop here — nothing downstream will work and the cause is local.
+If this fails, stop here. Nothing downstream will work and the cause is local.
 
 ---
 
-## Phase 2 — Supabase
+## Phase 2. Supabase
 
 ### 2a. Create the project
 
@@ -80,12 +80,12 @@ instead:
 ./scripts/db.sh push
 ```
 
-`db push` connects to `db.<ref>.supabase.co`, which resolves only over IPv6 —
+`db push` connects to `db.<ref>.supabase.co`, which resolves only over IPv6.
 IPv4 on that host is a paid add-on. Any network that can't carry IPv6 to it
 fails with a message that reads like an auth or provisioning problem and is
 neither. It is especially likely behind a fake-IP proxy (Clash, Shadowrocket,
 sing-box), where every hostname resolves to a synthetic `198.18.x.x` address and
-only proxied protocols reach anywhere — a plain port check still looks healthy,
+only proxied protocols reach anywhere. A plain port check still looks healthy,
 because TCP completes against the local proxy.
 
 `scripts/db.sh` routes the same command through the connection pooler, which is
@@ -107,8 +107,8 @@ It should apply five migrations in order:
 Dashboard → **Authentication → Sign In / Providers → Anonymous sign-ins →
 enable.**
 
-This is not optional — it is the entire onboarding path. Every "Start drawing"
-button calls `signInAnonymously()`. Without it, the landing page throws.
+This is not optional. It is the entire onboarding path. Every "Start drawing"
+button calls `signInAnonymously()`. Without it the landing page throws.
 
 ### 2d. Grab your keys
 
@@ -133,14 +133,14 @@ PGUSER=$(whoami) ./supabase/tests/run.sh    # expect: PASS
 
 ---
 
-## Phase 3 — Gemini key
+## Phase 3. Gemini key
 
 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → **Create API
 key** → copy it. Free tier is fine; it is rate-limited per minute, not per month.
 
 ---
 
-## Phase 4 — Fill in the environment
+## Phase 4. Fill in the environment
 
 Two files, same contents. The root one is for the load test; the app one is for
 Next.js.
@@ -167,8 +167,8 @@ Then copy it across:
 cp .env apps/web/.env.local
 ```
 
-`apps/web/.env.local` currently holds build-time placeholders from development —
-overwriting it is the right move. Both files are gitignored.
+`apps/web/.env.local` currently holds build-time placeholders from development,
+so overwriting it is the right move. Both files are gitignored.
 
 > Leaving `VISION_API_KEY` blank locally is deliberate: the vision service skips
 > its auth check when the variable is unset, and logs a warning saying so. In
@@ -176,7 +176,7 @@ overwriting it is the right move. Both files are gitignored.
 
 ---
 
-## Phase 5 — Run it locally
+## Phase 5. Run it locally
 
 ### 5a. Vision service
 
@@ -194,8 +194,8 @@ Verify OpenCV came through with the contrib modules:
 # 4.10.0 True
 ```
 
-`ximgproc` must be `True` — it provides the Zhang-Suen thinning the photo
-pipeline depends on. If it is `False`, you installed `opencv-python` instead of
+`ximgproc` must be `True`. It provides the Zhang-Suen thinning the photo pipeline
+depends on. If it is `False`, you installed `opencv-python` instead of
 `opencv-contrib-python`.
 
 Run its tests:
@@ -243,13 +243,13 @@ different subsystem, so a failure tells you which one.
    *Exercises: the OpenCV pipeline end to end.*
 
 If step 5 fails with a policy error, the `realtime.messages` policies from
-migration `...000300_rls.sql` did not apply — re-run `supabase db push`.
+migration `...000300_rls.sql` did not apply. Re-run `./scripts/db.sh push`.
 
 **You now have a fully working app.** Phases 6–9 are deployment.
 
 ---
 
-## Phase 6 — Render (the OpenCV service)
+## Phase 6. Render (the OpenCV service)
 
 Order matters from here: Render gives you a key that Vercel needs.
 
@@ -266,10 +266,10 @@ Order matters from here: Render gives you a key that Vercel needs.
 
 ---
 
-## Phase 7 — Vercel (the app)
+## Phase 7. Vercel (the app)
 
 1. Vercel → **Add New → Project** → import the `limn` repo.
-2. **Set Root Directory to `apps/web`.** This is the step people miss — without
+2. **Set Root Directory to `apps/web`.** This is the step people miss. Without
    it, Vercel builds the monorepo root and finds no Next.js app.
 3. Add environment variables (Production *and* Preview):
 
@@ -286,14 +286,14 @@ Order matters from here: Render gives you a key that Vercel needs.
 
 4. Deploy.
 
-`NEXT_PUBLIC_SITE_URL` has to be exactly right — every "Share" button builds its
+`NEXT_PUBLIC_SITE_URL` has to be right. Every "Share" button builds its
 link from it, so a wrong value produces links pointing at the wrong host.
 
 > **Check:** the landing page loads and shows live counters from your database.
 
 ---
 
-## Phase 8 — Close the CORS loop
+## Phase 8. Close the CORS loop
 
 Go back to **Render → your service → Environment** and set:
 
@@ -310,7 +310,7 @@ production with a browser CORS error that looks like the service being down.
 
 ---
 
-## Phase 9 — UptimeRobot keepalive
+## Phase 9. UptimeRobot keepalive
 
 A Render free instance sleeps after 15 minutes idle and takes ~50 seconds to
 wake. Fine for a cron job, unacceptable for someone who just tapped "trace my
@@ -333,7 +333,7 @@ so this works without handing UptimeRobot a secret.
 
 ---
 
-## Phase 10 — Get your numbers
+## Phase 10. Get your numbers
 
 Now that it's live, measure the one thing the README leaves blank:
 
@@ -344,7 +344,7 @@ pnpm loadtest --peers 25 --duration 30 --rate 8
 ```
 
 It opens 25 real WebSockets, embeds a send timestamp in each frame and reads it
-back at the receivers — so the p50/p95/p99 it reports is the full round trip
+back at the receivers, so the p50/p95/p99 it reports is the full round trip
 through Supabase, not local send time. Results are written to
 `loadtest-results/`.
 
@@ -353,7 +353,7 @@ full thing. It prints its projected message count first and refuses runs over
 200k without `--yes`.
 
 **Watch your quota.** Supabase free allows 2M messages/month, and every
-*delivered* frame counts — a broadcast to 25 peers is 25 messages. A 25-peer,
+*delivered* frame counts. A broadcast to 25 peers is 25 messages. A 25-peer,
 30-second, 8/s run is roughly 72k.
 
 ---
@@ -378,10 +378,10 @@ supabase db push          # apply new migrations
 | Landing page throws on "Start drawing" | Anonymous sign-ins not enabled (Phase 2c) |
 | Subscribe fails with a policy error | `...000300_rls.sql` didn't apply; re-run `db push` |
 | Second window shows no cursor | Check both are the *same* board id; a share link without `?t=` grants nothing |
-| Snapping never fires | Only freehand (pencil) strokes are recognised — the rectangle *tool* is already a rectangle |
+| Snapping never fires | Only freehand (pencil) strokes are recognised. The rectangle *tool* is already a rectangle |
 | Beautify returns 502 | `GEMINI_API_KEY` missing or rate-limited |
 | Photo trace times out | Cold Render instance; first request after a sleep pays ~50s |
 | Photo trace fails only in production | `ALLOWED_ORIGINS` (Phase 8) |
-| Build fails mentioning `serverEnv()` | Something imported it from a client component — that's the guard working |
+| Build fails mentioning `serverEnv()` | Something imported it from a client component, which is the guard working |
 | `ximgproc` is False | You have `opencv-python`, not `opencv-contrib-python` |
 | Vercel build finds no Next.js app | Root Directory isn't `apps/web` (Phase 7.2) |

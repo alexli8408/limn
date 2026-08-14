@@ -13,7 +13,7 @@ select count(*) as profiles from public.profiles;
 
 -- An anonymous sign-in has a null email. split_part('', '@', 1) returns an empty
 -- string rather than null, so a coalesce chain ending in 'Guest' silently
--- returns '' instead — every guest ends up nameless.
+-- returns '' instead, every guest ends up nameless.
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
 values ('44444444-4444-4444-4444-444444444444', null, '{}'::jsonb,
         '{"provider":"anonymous"}'::jsonb);
@@ -153,7 +153,7 @@ begin
   if (select count(*) from pg_policies
       where schemaname = 'realtime' and tablename = 'messages'
         and policyname in ('realtime_board_receive','realtime_board_send')) <> 2 then
-    raise notice 'UNEXPECTED: realtime.messages policies missing — the exception handler swallowed a real failure';
+    raise notice 'UNEXPECTED: realtime.messages policies missing, the exception handler swallowed a real failure';
   end if;
 end $$;
 

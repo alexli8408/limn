@@ -1,7 +1,7 @@
 -- Row-level security, including authorization for Realtime channels.
 
 -- Topics are named `board:<uuid>` and storage paths `<uuid>/<file>`. Both need
--- a cast that returns null instead of raising on anything malformed — these run
+-- a cast that returns null instead of raising on anything malformed, these run
 -- inside policies, where an exception is a 500 rather than a denial.
 create or replace function public.safe_uuid(p_text text)
 returns uuid
@@ -41,7 +41,7 @@ $$;
 
 alter table public.profiles enable row level security;
 
--- Readable by yourself, and by anyone you actually share a board with — enough
+-- Readable by yourself, and by anyone you actually share a board with, enough
 -- for collaborator lists and avatars, without exposing the whole user table.
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles
@@ -208,7 +208,7 @@ create policy vision_jobs_insert_own on public.vision_jobs
 -- just by knowing its id.
 --
 -- On a hosted project this table belongs to supabase_realtime_admin and already
--- has RLS enabled, so the ALTER is both unnecessary and not permitted — it fails
+-- has RLS enabled, so the ALTER is both unnecessary and not permitted, it fails
 -- with "must be owner of table messages" and takes the whole migration with it.
 -- Only enable it where it is actually off and we actually own it, which is the
 -- plain-Postgres case the test harness runs.
@@ -249,8 +249,8 @@ begin
 
   -- Split deliberately by extension. Editors broadcast scene deltas and cursors;
   -- viewers get presence only, so a read-only collaborator cannot inject element
-  -- updates into everyone else's live canvas. (They could never *persist* them —
-  -- save_board_snapshot checks can_edit_board — but transient corruption of a
+  -- updates into everyone else's live canvas. (They could never *persist* them,
+  -- save_board_snapshot checks can_edit_board, but transient corruption of a
   -- session is still worth preventing.) The client publishes viewer cursors as
   -- presence state instead.
   execute 'drop policy if exists realtime_board_send on realtime.messages';

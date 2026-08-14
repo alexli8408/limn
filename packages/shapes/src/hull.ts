@@ -24,7 +24,7 @@ export function convexHull(points: readonly Point[]): Point[] {
 }
 
 export interface OrientedRect {
-  /** Centre, not corner — the corner depends on rotation. */
+  /** Centre, not corner, the corner depends on rotation. */
   cx: number;
   cy: number;
   width: number;

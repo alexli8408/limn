@@ -1,7 +1,7 @@
 """Freehand stroke smoothing, for strokes the fitter declined to replace.
 
 Not every stroke is a shape. Handwriting, annotation arrows drawn in three
-segments, a scribble emphasising something — these should stay themselves, just
+segments, a scribble emphasising something, these should stay themselves, just
 tidier. This module removes tremor without removing intent.
 """
 

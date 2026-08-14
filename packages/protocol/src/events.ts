@@ -62,7 +62,7 @@ export const BoardEvent = {
 
 export type BoardEventName = (typeof BoardEvent)[keyof typeof BoardEvent];
 
-/** Incremental element changes. The workhorse — one every ~33 ms while drawing. */
+/** Incremental element changes. The workhorse, one every ~33 ms while drawing. */
 export const sceneEventSchema = z.object({
   ...envelope,
   elements: z.array(syncElementSchema).max(MAX_ELEMENTS_PER_UPDATE),
@@ -142,7 +142,7 @@ export type EventPayloadMap = {
 
 /**
  * Validates an inbound broadcast payload. Returns a discriminated result rather
- * than throwing — a malformed frame is a routine event on a public channel, not
+ * than throwing, a malformed frame is a routine event on a public channel, not
  * an exceptional one, and the hot path should not pay for stack capture.
  */
 export function decodeEvent<K extends BoardEventName>(

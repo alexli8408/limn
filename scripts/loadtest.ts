@@ -6,7 +6,7 @@
  * to come back out at the other peers.
  *
  * The point is to produce numbers that are actually defensible. Latency is
- * measured end to end — a timestamp is written into the element payload by the
+ * measured end to end, a timestamp is written into the element payload by the
  * sender and compared against the receiver's clock in the same process, so there
  * is no clock skew to argue about and the figure includes the full round trip
  * through Supabase rather than just local send time.

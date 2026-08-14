@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Limn — realtime collaborative whiteboard",
+  title: "Limn, realtime collaborative whiteboard",
   description:
     "Sketch together in realtime. Freehand strokes snap to clean shapes, and Gemini redraws a rough sketch as a proper diagram without changing what you meant.",
   openGraph: {

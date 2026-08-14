@@ -6,7 +6,7 @@ polyline to the shape fitter.
 
 Skeletonising before tracing is the step that makes the output *editable* rather
 than merely traced. Running findContours on the thresholded ink gives you the
-outline of the marker stroke — a rectangle comes back as two nested rings, one
+outline of the marker stroke, a rectangle comes back as two nested rings, one
 just outside the ink and one just inside, and neither is the rectangle. Thinning
 to the stroke's centreline first means a rectangle traces as one closed path
 that the fitter can turn into an actual rectangle element.
@@ -122,7 +122,7 @@ def deskew(img: np.ndarray) -> tuple[np.ndarray, bool]:
         flattened = cv2.warpPerspective(img, matrix, (width, height))
 
         # Trim a thin margin. The detected quad never lands exactly on the board
-        # edge, so a rim of whatever was outside it survives the warp — and a
+        # edge, so a rim of whatever was outside it survives the warp, and a
         # high-contrast rim is precisely what adaptiveThreshold reads as a long
         # straight stroke down the side of the diagram.
         inset = max(2, int(min(width, height) * 0.012))
@@ -139,7 +139,7 @@ def extract_ink(img: np.ndarray) -> np.ndarray:
     either loses strokes in the shadowed corner or turns the glare into ink.
     """
     grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Edge-preserving denoise — a plain blur softens thin strokes into nothing.
+    # Edge-preserving denoise, a plain blur softens thin strokes into nothing.
     grey = cv2.bilateralFilter(grey, 7, 60, 60)
 
     block = max(11, (min(img.shape[:2]) // 20) | 1)
@@ -172,7 +172,7 @@ def prune_redundant(skel: np.ndarray) -> np.ndarray:
     Zhang-Suen guarantees a one-pixel-wide result but not a *topologically clean*
     one: where the centreline steps diagonally, it leaves pixels with three
     8-neighbours that are plainly mid-stroke. Measured on a plain 360x220 ellipse,
-    the raw thinned skeleton has 311 such pixels out of 930 — a third of the
+    the raw thinned skeleton has 311 such pixels out of 930, a third of the
     curve. Any graph built on that sees two dozen junctions where there are none,
     and the ellipse arrives in twenty pieces. After this pass: zero.
 
@@ -260,7 +260,7 @@ class SkeletonGraph:
     small clump of degree-3 pixels, and between them run one- and two-pixel
     stubs. Treating every such pixel as its own junction produces a swarm of
     micro-fragments, and then any rule of the form "two ends meeting must belong
-    together" chains straight through a real T — which is how two boxes and the
+    together" chains straight through a real T, which is how two boxes and the
     connector between them end up as a single polyline.
 
     Dilating the junction mask before labelling collapses each clump to one node.
@@ -338,7 +338,7 @@ def assemble_branches(
 ) -> list[np.ndarray]:
     """Joins branches back into strokes, one decision per junction node.
 
-    * A node with two branches is a corner the thinning split. Join outright —
+    * A node with two branches is a corner the thinning split. Join outright,
       a corner is a 90 degree turn, so a continuity test would reject precisely
       the case being repaired.
     * A node with three or more is a real junction. Join only the straightest

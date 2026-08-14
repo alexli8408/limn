@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     });
 
     // The model is told to pick a layered layout, but "preserve" makes no sense
-    // with no sketch to preserve — there would be nothing to derive geometry from.
+    // with no sketch to preserve, there would be nothing to derive geometry from.
     const diagram =
       result.diagram.layout === "preserve"
         ? { ...result.diagram, layout: "layered-tb" as const }

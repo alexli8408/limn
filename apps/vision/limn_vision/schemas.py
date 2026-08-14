@@ -1,8 +1,8 @@
 """Request/response contracts for the vision service.
 
 Coordinates are always in the *caller's* space (Excalidraw scene units for
-stroke endpoints, source pixels for image endpoints). Every internal transform —
-normalisation, rasterisation, perspective warp — is undone before responding, so
+stroke endpoints, source pixels for image endpoints). Every internal transform,
+normalisation, rasterisation, perspective warp, is undone before responding, so
 the web app never has to know how any of this works.
 """
 
@@ -51,7 +51,7 @@ class ShapeSpec(BaseModel):
     y: float = 0.0
     width: float = 0.0
     height: float = 0.0
-    #: Radians, about the box centre — matches Excalidraw's own convention.
+    #: Radians, about the box centre, matches Excalidraw's own convention.
     angle: float = 0.0
     #: Element-local vertices, for path kinds only (line/arrow/polygon/triangle).
     points: list[Point] | None = None

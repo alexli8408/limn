@@ -1,7 +1,7 @@
 -- Displace Supabase's default table privileges instead of merely adding to them.
 --
--- A hosted project ships default ACLs on schema public granting `arwdDxtm` —
--- insert, select, update, delete, truncate, references, trigger, maintain — to
+-- A hosted project ships default ACLs on schema public granting `arwdDxtm`,
+-- insert, select, update, delete, truncate, references, trigger, maintain, to
 -- anon and authenticated for every table created there. The grants in
 -- 000500_grants.sql are additive, so they never displaced those: on the real
 -- project `authenticated` ended up holding DELETE, INSERT, UPDATE and TRUNCATE
@@ -9,7 +9,7 @@
 --
 -- How bad: not exploitable as it stands. PostgREST does not expose TRUNCATE, and
 -- board_snapshots has no insert/update/delete policies, so RLS denies those
--- paths — it fails closed. But the entire point of granting narrowly is that
+-- paths, it fails closed. But the entire point of granting narrowly is that
 -- privileges are the coarse gate, so a policy that is missing or later dropped
 -- fails closed rather than open. That property was not actually holding.
 --
@@ -23,7 +23,7 @@ revoke all on all tables in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 
 -- 2. Stop future tables inheriting it. No `for role` clause, so this targets
---    current_user's own default ACL — `postgres` when the CLI applies it, and
+--    current_user's own default ACL, `postgres` when the CLI applies it, and
 --    whoever runs the test harness locally. supabase_admin's separate default
 --    ACL is not ours to change, but every table these migrations create is
 --    created by the migrating role, so this is the entry that governs them.

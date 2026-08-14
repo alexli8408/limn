@@ -2,7 +2,7 @@
 --
 -- Object naming convention is `<board_id>/<file_id>`, which lets the same
 -- can_read_board / can_edit_board helpers that guard the tables also guard the
--- blobs — see path_board_id() in the RLS migration.
+-- blobs, see path_board_id() in the RLS migration.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

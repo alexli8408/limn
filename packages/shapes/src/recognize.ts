@@ -48,7 +48,7 @@ export interface RecognitionMetrics {
   corners: number;
   /** 4πA/P². 1.0 for a circle, π/4 for a square, ~0.60 for an equilateral triangle. */
   circularity: number;
-  /** Area over min-area-rect area. Note a diamond scores ~0.75, not 0.5 — its
+  /** Area over min-area-rect area. Note a diamond scores ~0.75, not 0.5, its
    *  minimal enclosing rectangle is edge-aligned, not axis-aligned. */
   rectFill: number;
   convexity: number;
@@ -85,7 +85,7 @@ export interface RecognizeOptions {
   angleSnap?: number;
   /** Strokes shorter than this are treated as deliberate marks, not shapes. */
   minLength?: number;
-  /** Overrides open/closed inference — the caller sometimes knows better. */
+  /** Overrides open/closed inference, the caller sometimes knows better. */
   hint?: "open" | "closed";
 }
 
@@ -347,7 +347,7 @@ export function recognizeStroke(
       );
 
       // A diamond: diagonals perpendicular and mutually bisecting. Deliberately
-      // NOT tested via rectFill — a diamond's minimal enclosing rectangle hugs
+      // NOT tested via rectFill, a diamond's minimal enclosing rectangle hugs
       // its edges rather than its bounding box, so that ratio lands near 0.75
       // and overlaps the rectangle case completely.
       scores.diamond = combine(

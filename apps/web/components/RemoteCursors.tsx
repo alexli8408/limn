@@ -14,7 +14,7 @@ interface Props {
  * Remote cursors, drawn as an overlay above the canvas.
  *
  * Positions arrive in scene coordinates, which is the only sane choice on the
- * wire — a viewport coordinate is meaningless to a peer at a different zoom or
+ * wire, a viewport coordinate is meaningless to a peer at a different zoom or
  * scroll offset. They are projected to screen space here, on every animation
  * frame, so the cursors track correctly while the local user pans and zooms.
  */

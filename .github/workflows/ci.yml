@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       # No `version:` here on purpose. The action errors out if a version is
       # given both here and as `packageManager` in package.json, and
-      # packageManager is the better single source of truth — it also pins the
+      # packageManager is the better single source of truth, it also pins the
       # version local installs use.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
