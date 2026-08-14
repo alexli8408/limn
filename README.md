@@ -113,7 +113,7 @@ cadence. Sync only needs the four fields that drive conflict resolution.
 
 ## Running it
 
-Needs Node 22+, pnpm 11+, Python 3.12, and a Supabase project.
+Needs Node 22+, pnpm 11+, Python 3.11 or 3.12, and a Supabase project.
 
 ```bash
 pnpm install
@@ -123,7 +123,7 @@ cp .env.example .env && cp .env.example apps/web/.env.local   # then fill both i
 supabase link --project-ref <ref> && supabase db push
 
 # vision service
-cd apps/vision && python3.12 -m venv .venv
+cd apps/vision && python3.11 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt && cd ../..
 
 pnpm dev        # web :3000, vision :8000
@@ -133,8 +133,11 @@ In the Supabase dashboard, enable **Authentication → Providers → Anonymous
 sign-ins** (the one-click onboarding path) and **Realtime authorization** for
 private channels.
 
-Deployment, including the UptimeRobot keepalive that stops Render's free instance
-sleeping through a 50-second cold start, is in [docs/DEPLOY.md](docs/DEPLOY.md).
+Step-by-step from nothing — including which dashboard toggles matter and a smoke
+test that isolates each subsystem — is in [docs/SETUP.md](docs/SETUP.md).
+Deployment reference, including the UptimeRobot keepalive that stops Render's
+free instance sleeping through a 50-second cold start, is in
+[docs/DEPLOY.md](docs/DEPLOY.md).
 Design decisions and the reasoning behind them are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

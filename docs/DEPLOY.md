@@ -10,6 +10,7 @@ OpenCV service on Render. UptimeRobot keeps the last one awake.
 Create a project, then from the repo root:
 
 ```bash
+supabase init                                  # if supabase/config.toml is absent
 supabase link --project-ref <your-project-ref>
 supabase db push
 ```
@@ -20,10 +21,12 @@ Then in the dashboard:
   onboarding path — a visitor is drawing within one click, with no email step.
   Anonymous users are real rows in `auth.users`, so they own boards and can be
   upgraded in place if they later sign up.
-- **Realtime → Authorization: enable.** The client subscribes with
-  `config.private: true`, which is what makes the RLS policies on
-  `realtime.messages` apply. Without it the topic string is unauthenticated and
-  any signed-in user could subscribe to any board's channel by knowing its id.
+- **Realtime private channels.** No toggle to hunt for on a current project:
+  authorization *is* the RLS policies on `realtime.messages`, which migration
+  `...000300_rls.sql` installs. What matters is that the client subscribes with
+  `config.private: true`, which it does — without that the topic string is
+  unauthenticated and any signed-in user could subscribe to any board's channel
+  by knowing its id.
 
 Copy the project URL and the **anon** key from Settings → API. The anon key is
 safe to expose; it only ever acts through RLS. Never put the service-role key
