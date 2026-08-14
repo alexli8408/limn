@@ -121,6 +121,21 @@ select public.can_read_board(public.topic_board_id('board:' || :'board_id')) as 
        public.can_edit_board(public.topic_board_id('board:' || :'board_id')) as friend_may_broadcast;
 reset role;
 
+\echo '--- the realtime policies must actually exist, not have been skipped'
+select count(*) as realtime_policies
+from pg_policies
+where schemaname = 'realtime' and tablename = 'messages'
+  and policyname in ('realtime_board_receive', 'realtime_board_send');
+
+do $$
+begin
+  if (select count(*) from pg_policies
+      where schemaname = 'realtime' and tablename = 'messages'
+        and policyname in ('realtime_board_receive','realtime_board_send')) <> 2 then
+    raise notice 'UNEXPECTED: realtime.messages policies missing — the exception handler swallowed a real failure';
+  end if;
+end $$;
+
 \echo '--- malformed topics must return null, never raise'
 select public.topic_board_id('board:not-a-uuid') as bad_uuid,
        public.topic_board_id('haxx:11111111-1111-1111-1111-111111111111') as wrong_prefix,

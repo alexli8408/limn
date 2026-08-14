@@ -43,6 +43,7 @@ alter table public.profiles enable row level security;
 
 -- Readable by yourself, and by anyone you actually share a board with — enough
 -- for collaborator lists and avatars, without exposing the whole user table.
+drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles
   for select to authenticated
   using (
@@ -61,6 +62,7 @@ create policy profiles_select on public.profiles
     )
   );
 
+drop policy if exists profiles_update_own on public.profiles;
 create policy profiles_update_own on public.profiles
   for update to authenticated
   using (id = auth.uid())
@@ -72,19 +74,23 @@ create policy profiles_update_own on public.profiles
 
 alter table public.boards enable row level security;
 
+drop policy if exists boards_select on public.boards;
 create policy boards_select on public.boards
   for select to authenticated
   using (public.can_read_board(id));
 
+drop policy if exists boards_insert_own on public.boards;
 create policy boards_insert_own on public.boards
   for insert to authenticated
   with check (owner_id = auth.uid());
 
+drop policy if exists boards_update on public.boards;
 create policy boards_update on public.boards
   for update to authenticated
   using (public.can_edit_board(id))
   with check (public.can_edit_board(id));
 
+drop policy if exists boards_delete_owner on public.boards;
 create policy boards_delete_owner on public.boards
   for delete to authenticated
   using (owner_id = auth.uid());
@@ -112,6 +118,7 @@ begin
 end;
 $$;
 
+drop trigger if exists boards_guard_sharing on public.boards;
 create trigger boards_guard_sharing
   before update on public.boards
   for each row execute function public.guard_board_ownership_fields();
@@ -122,16 +129,19 @@ create trigger boards_guard_sharing
 
 alter table public.board_collaborators enable row level security;
 
+drop policy if exists board_collaborators_select on public.board_collaborators;
 create policy board_collaborators_select on public.board_collaborators
   for select to authenticated
   using (public.can_read_board(board_id));
 
+drop policy if exists board_collaborators_write_owner on public.board_collaborators;
 create policy board_collaborators_write_owner on public.board_collaborators
   for all to authenticated
   using (public.board_role_for(board_id) = 'owner')
   with check (public.board_role_for(board_id) = 'owner');
 
 -- Leaving a board you were invited to does not require the owner.
+drop policy if exists board_collaborators_leave on public.board_collaborators;
 create policy board_collaborators_leave on public.board_collaborators
   for delete to authenticated
   using (user_id = auth.uid());
@@ -143,10 +153,12 @@ create policy board_collaborators_leave on public.board_collaborators
 alter table public.board_snapshots enable row level security;
 alter table public.board_revisions enable row level security;
 
+drop policy if exists board_snapshots_select on public.board_snapshots;
 create policy board_snapshots_select on public.board_snapshots
   for select to authenticated
   using (public.can_read_board(board_id));
 
+drop policy if exists board_revisions_select on public.board_revisions;
 create policy board_revisions_select on public.board_revisions
   for select to authenticated
   using (public.can_read_board(board_id));
@@ -163,18 +175,22 @@ alter table public.ai_generations enable row level security;
 alter table public.vision_jobs enable row level security;
 alter table public.stats_cache enable row level security;
 
+drop policy if exists ai_generations_select_own on public.ai_generations;
 create policy ai_generations_select_own on public.ai_generations
   for select to authenticated
   using (user_id = auth.uid());
 
+drop policy if exists ai_generations_insert_own on public.ai_generations;
 create policy ai_generations_insert_own on public.ai_generations
   for insert to authenticated
   with check (user_id = auth.uid());
 
+drop policy if exists vision_jobs_select_own on public.vision_jobs;
 create policy vision_jobs_select_own on public.vision_jobs
   for select to authenticated
   using (user_id = auth.uid());
 
+drop policy if exists vision_jobs_insert_own on public.vision_jobs;
 create policy vision_jobs_insert_own on public.vision_jobs
   for insert to authenticated
   with check (user_id = auth.uid());
@@ -190,25 +206,66 @@ create policy vision_jobs_insert_own on public.vision_jobs
 -- only enforcement point available: the client picks its own topic string, so
 -- without these an authenticated user could subscribe to any board's channel
 -- just by knowing its id.
-alter table realtime.messages enable row level security;
+--
+-- On a hosted project this table belongs to supabase_realtime_admin and already
+-- has RLS enabled, so the ALTER is both unnecessary and not permitted — it fails
+-- with "must be owner of table messages" and takes the whole migration with it.
+-- Only enable it where it is actually off and we actually own it, which is the
+-- plain-Postgres case the test harness runs.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'realtime' and c.relname = 'messages' and c.relrowsecurity
+  ) then
+    alter table realtime.messages enable row level security;
+  end if;
+exception
+  when insufficient_privilege then
+    raise notice 'realtime.messages RLS is managed by Supabase; leaving it alone';
+end $$;
 
-create policy realtime_board_receive on realtime.messages
-  for select to authenticated
-  using (
-    extension in ('broadcast', 'presence')
-    and public.can_read_board(public.topic_board_id(realtime.topic()))
-  );
+-- Creating a policy also requires table ownership, so it can hit the same
+-- restriction as the ALTER above. Run through EXECUTE inside a handler: if the
+-- grant is not there, the migration should still finish and say precisely what
+-- to do, rather than aborting and leaving the schema half-applied.
+--
+-- Fails closed if skipped: RLS is already on, and a table with RLS enabled and
+-- no policies denies everyone. The app breaks visibly at subscribe time; it does
+-- not silently expose boards.
+do $$
+begin
+  execute 'drop policy if exists realtime_board_receive on realtime.messages';
+  execute $p$
+    create policy realtime_board_receive on realtime.messages
+      for select to authenticated
+      using (
+        extension in ('broadcast', 'presence')
+        and public.can_read_board(public.topic_board_id(realtime.topic()))
+      )
+  $p$;
 
--- Split deliberately by extension. Editors broadcast scene deltas and cursors;
--- viewers get presence only, so a read-only collaborator cannot inject element
--- updates into everyone else's live canvas. (They could never *persist* them —
--- save_board_snapshot checks can_edit_board — but transient corruption of a
--- session is still worth preventing.) The client publishes viewer cursors as
--- presence state instead.
-create policy realtime_board_send on realtime.messages
-  for insert to authenticated
-  with check (
-    (extension = 'presence' and public.can_read_board(public.topic_board_id(realtime.topic())))
-    or
-    (extension = 'broadcast' and public.can_edit_board(public.topic_board_id(realtime.topic())))
-  );
+  -- Split deliberately by extension. Editors broadcast scene deltas and cursors;
+  -- viewers get presence only, so a read-only collaborator cannot inject element
+  -- updates into everyone else's live canvas. (They could never *persist* them —
+  -- save_board_snapshot checks can_edit_board — but transient corruption of a
+  -- session is still worth preventing.) The client publishes viewer cursors as
+  -- presence state instead.
+  execute 'drop policy if exists realtime_board_send on realtime.messages';
+  execute $p$
+    create policy realtime_board_send on realtime.messages
+      for insert to authenticated
+      with check (
+        (extension = 'presence' and public.can_read_board(public.topic_board_id(realtime.topic())))
+        or
+        (extension = 'broadcast' and public.can_edit_board(public.topic_board_id(realtime.topic())))
+      )
+  $p$;
+exception
+  when insufficient_privilege then
+    raise warning
+      'Could not create the realtime.messages policies (%). Realtime subscribe will be denied until they exist. Paste the two create policy statements from this migration into the Supabase dashboard SQL editor.',
+      sqlerrm;
+end $$;

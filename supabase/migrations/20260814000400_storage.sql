@@ -30,6 +30,7 @@ on conflict (id) do update
   set public = true,
       file_size_limit = excluded.file_size_limit;
 
+drop policy if exists board_files_read on storage.objects;
 create policy board_files_read on storage.objects
   for select to authenticated
   using (
@@ -37,6 +38,7 @@ create policy board_files_read on storage.objects
     and public.can_read_board(public.path_board_id(name))
   );
 
+drop policy if exists board_files_write on storage.objects;
 create policy board_files_write on storage.objects
   for insert to authenticated
   with check (
@@ -44,6 +46,7 @@ create policy board_files_write on storage.objects
     and public.can_edit_board(public.path_board_id(name))
   );
 
+drop policy if exists board_files_delete on storage.objects;
 create policy board_files_delete on storage.objects
   for delete to authenticated
   using (
@@ -51,6 +54,7 @@ create policy board_files_delete on storage.objects
     and public.can_edit_board(public.path_board_id(name))
   );
 
+drop policy if exists board_thumbnails_write on storage.objects;
 create policy board_thumbnails_write on storage.objects
   for insert to authenticated
   with check (
@@ -58,6 +62,7 @@ create policy board_thumbnails_write on storage.objects
     and public.can_edit_board(public.path_board_id(name))
   );
 
+drop policy if exists board_thumbnails_update on storage.objects;
 create policy board_thumbnails_update on storage.objects
   for update to authenticated
   using (
