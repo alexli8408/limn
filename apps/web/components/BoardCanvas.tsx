@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Excalidraw,
   CaptureUpdateAction,
@@ -42,7 +42,6 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [beautifyOn, setBeautifyOn] = useState(true);
   const [aiRun, setAiRun] = useState<AiRun | null>(null);
-  const [peerActivity, setPeerActivity] = useState<string | null>(null);
 
   const readOnly = props.role === "viewer";
 
@@ -349,13 +348,6 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     [api, readOnly, props.boardId, commit],
   );
 
-  /** Surface a collaborator's in-flight generation, so the canvas isn't silent. */
-  useEffect(() => {
-    if (!peerActivity) return;
-    const timer = setTimeout(() => setPeerActivity(null), 6000);
-    return () => clearTimeout(timer);
-  }, [peerActivity]);
-
   const initialData = useMemo(
     () => ({
       elements: props.initialElements as never,
@@ -407,6 +399,19 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         </Excalidraw>
 
         <RemoteCursors cursors={collab.cursors} api={api} />
+
+        {collab.peerActivity && (
+          <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-neutral-900/90 px-3 py-1.5 text-xs text-white shadow-lg">
+            <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+            {collab.peerActivity.label} is{" "}
+            {collab.peerActivity.mode === "vectorize"
+              ? "tracing a photo"
+              : collab.peerActivity.mode === "prompt"
+                ? "generating a diagram"
+                : "cleaning up the sketch"}
+            …
+          </div>
+        )}
 
         {!readOnly && (
           <AiPanel

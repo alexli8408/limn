@@ -42,9 +42,17 @@ export interface UseCollabOptions {
   onRemoteScene: (elements: SyncElement[], changed: string[]) => void;
 }
 
+/** A collaborator's in-flight AI generation, so the canvas is not silently busy. */
+export interface PeerActivity {
+  peerId: string;
+  label: string;
+  mode: "refine" | "recompose" | "prompt" | "vectorize";
+}
+
 export interface CollabHandle {
   status: ConnectionStatus;
   peers: PeerState[];
+  peerActivity: PeerActivity | null;
   cursors: Map<string, CursorState & { peer: PeerState }>;
   isWriter: boolean;
   savedVersion: number;
@@ -99,6 +107,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const [cursors, setCursors] = useState<Map<string, CursorState & { peer: PeerState }>>(
     new Map(),
   );
+  const [peerActivity, setPeerActivity] = useState<PeerActivity | null>(null);
   const [savedVersion, setSavedVersion] = useState(initialVersion);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
@@ -206,6 +215,21 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     [flushScene, snapshots],
   );
 
+  const cursorPresence = useCallback(
+    (cursor: CursorState) => ({
+      peerId,
+      userId,
+      name: displayName,
+      color,
+      role,
+      guest,
+      joinedAt,
+      ...(avatarUrl ? { avatarUrl } : {}),
+      cursor,
+    }),
+    [peerId, userId, displayName, color, role, guest, joinedAt, avatarUrl],
+  );
+
   const flushCursor = useCallback(() => {
     cursorTimer.current = null;
     const cursor = pendingCursor.current;
@@ -227,22 +251,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
       event: BoardEvent.CURSOR,
       payload: { from: peerId, v: PROTOCOL_VERSION, ...cursor },
     });
-  }, [peerId, role]);
-
-  const cursorPresence = useCallback(
-    (cursor: CursorState) => ({
-      peerId,
-      userId,
-      name: displayName,
-      color,
-      role,
-      guest,
-      joinedAt,
-      ...(avatarUrl ? { avatarUrl } : {}),
-      cursor,
-    }),
-    [peerId, userId, displayName, color, role, guest, joinedAt, avatarUrl],
-  );
+  }, [peerId, role, cursorPresence]);
 
   const publishCursor = useCallback(
     (x: number, y: number, tool?: string, button?: "up" | "down") => {
@@ -371,6 +380,17 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         setLastSavedAt(result.data.at);
         snapshots.observeVersion(result.data.sceneVersion);
       })
+      .on("broadcast", { event: BoardEvent.AI }, ({ payload }) => {
+        const result = decodeEvent(BoardEvent.AI, payload);
+        if (!result.ok || result.data.from === peerId) return;
+        const { from, phase, mode, label } = result.data;
+        setPeerActivity((previous) => {
+          if (phase === "start") return { peerId: from, label: label ?? "Someone", mode };
+          // Only the peer that started it may clear it, or one person finishing
+          // would hide another's still-running generation.
+          return previous?.peerId === from ? null : previous;
+        });
+      })
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState() as Record<string, unknown[]>;
         const roster = flattenPresence(state);
@@ -486,6 +506,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   return {
     status,
     peers,
+    peerActivity,
     cursors,
     isWriter,
     savedVersion,
