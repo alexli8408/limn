@@ -157,6 +157,32 @@ function isNetworkFault(error: unknown): boolean {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Distinguishes a per-minute 429 from a daily one.
+ *
+ * They need opposite handling and the status code alone cannot tell them apart.
+ * A per-minute burst clears in seconds and is worth waiting out. The free tier's
+ * daily allowance is 20 requests per model, and once that is gone no amount of
+ * backoff brings it back, so retrying just adds five seconds to an error the
+ * user needs to read.
+ */
+function quotaInfo(error: unknown): { daily: boolean; retryAfterS: number; limit: string } | null {
+  const message =
+    typeof error === "object" && error !== null && typeof (error as { message?: unknown }).message === "string"
+      ? ((error as { message: string }).message)
+      : "";
+  if (!message.includes("RESOURCE_EXHAUSTED") && !message.includes("quota")) return null;
+
+  const daily = /PerDay|RequestsPerDay/i.test(message);
+  const retry = message.match(/"retryDelay":\s*"(\d+)s"/);
+  const value = message.match(/"quotaValue":\s*"(\d+)"/);
+  return {
+    daily,
+    retryAfterS: retry?.[1] ? Number(retry[1]) : 0,
+    limit: value?.[1] ?? "?",
+  };
+}
+
 async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult> {
   const started = Date.now();
 
@@ -186,7 +212,8 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
     // 503 means the model is momentarily oversubscribed, which happens often
     // enough on the newest models to be worth riding out rather than surfacing.
     // A socket reset gets the same treatment: it never reached the API at all.
-    if ((TRANSIENT.has(status) || isNetworkFault(error)) && attempt < 3) {
+    const daily = status === 429 && quotaInfo(error)?.daily;
+    if (!daily && (TRANSIENT.has(status) || isNetworkFault(error)) && attempt < 3) {
       await wait(700 * 2 ** attempt);
       return generate(args, attempt + 1);
     }
@@ -195,6 +222,22 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
     // tier at all. Falling back beats failing the request outright.
     if (status === 429 && args.fallbackModel && args.model !== args.fallbackModel) {
       return generate({ ...args, model: args.fallbackModel }, 0);
+    }
+
+    if (status === 429) {
+      const quota = quotaInfo(error);
+      if (quota?.daily) {
+        throw new Error(
+          `Out of Gemini requests for today. The free tier allows ${quota.limit} per day for ` +
+            `"${args.model}", and each model has its own allowance, so switching GEMINI_MODEL ` +
+            `(gemini-3.1-flash-lite, gemini-3.5-flash) gives you a fresh one. Enabling billing removes the cap.`,
+        );
+      }
+      throw new Error(
+        quota?.retryAfterS
+          ? `Gemini is rate limiting this key. Try again in about ${quota.retryAfterS}s.`
+          : "Gemini is rate limiting this key. Try again shortly.",
+      );
     }
 
     if (status === 404) {
@@ -272,6 +315,97 @@ export async function refineSketch(input: {
     // sketch on every retry, so the user has no way to get a different answer.
     temperature: 0.2,
   });
+}
+
+export interface IllustrateResult {
+  /** Base64 PNG, no data-URL prefix. */
+  imageBase64: string;
+  mimeType: string;
+  model: string;
+  latencyMs: number;
+}
+
+const ILLUSTRATE_PROMPT = `Redraw this hand-drawn sketch as a finished illustration.
+
+Keep the same subject, composition and layout: whatever is on the left stays on
+the left, and nothing is added or removed. You are cleaning up the execution,
+not reinterpreting the idea.
+
+Use confident line work and colour. Flat white background, no photographic
+texture, no drop shadows, no frame or border. Do not add text, captions,
+watermarks or signatures that are not already in the sketch.`;
+
+/**
+ * Sketch to finished illustration.
+ *
+ * Separate from the diagram path on purpose. A structural IR can express a
+ * flowchart and cannot express "make this colourful", so a drawing had nothing
+ * to be turned into. An image model can answer that directly.
+ *
+ * The trade-off is real and the UI says so: the result is a picture, not
+ * editable shapes.
+ */
+export async function illustrateSketch(input: {
+  imageBase64: string;
+  instruction?: string;
+  attempt?: number;
+}): Promise<IllustrateResult> {
+  const env = serverEnv();
+  const model = env.geminiImageModel;
+  const started = Date.now();
+  const attempt = input.attempt ?? 0;
+
+  try {
+    const response = await ai().models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "image/png", data: input.imageBase64 } },
+            {
+              text: input.instruction
+                ? `${ILLUSTRATE_PROMPT}
+
+The author also asked: ${input.instruction}`
+                : ILLUSTRATE_PROMPT,
+            },
+          ],
+        },
+      ],
+      config: { responseModalities: ["IMAGE"] },
+    });
+
+    const parts = response.candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+      const data = part.inlineData?.data;
+      if (data) {
+        return {
+          imageBase64: data,
+          mimeType: part.inlineData?.mimeType ?? "image/png",
+          model,
+          latencyMs: Date.now() - started,
+        };
+      }
+    }
+
+    // An image model that answers in prose usually means it refused. Surface
+    // that text rather than a generic failure, since it explains itself.
+    const text = parts.map((p) => p.text).filter(Boolean).join(" ").trim();
+    throw new Error(text ? `The model replied instead of drawing: ${text}` : "No image was returned");
+  } catch (error) {
+    const status = statusOf(error);
+    if ((TRANSIENT.has(status) || isNetworkFault(error)) && attempt < 3) {
+      await wait(900 * 2 ** attempt);
+      return illustrateSketch({ ...input, attempt: attempt + 1 });
+    }
+    if (status === 404) {
+      throw new Error(
+        `Image model "${model}" is unavailable to this API key. Set GEMINI_IMAGE_MODEL to one your key can reach.`,
+      );
+    }
+    throw error;
+  }
 }
 
 /** Text to diagram. No sketch to preserve, so the layout engine does the placing. */

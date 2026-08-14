@@ -7,7 +7,7 @@
 
 export type BoardVisibility = "private" | "link" | "public";
 export type BoardRole = "owner" | "editor" | "viewer";
-export type AiMode = "refine" | "recompose" | "prompt" | "vectorize";
+export type AiMode = "refine" | "recompose" | "prompt" | "vectorize" | "illustrate";
 
 export type BoardRow = {
   id: string;

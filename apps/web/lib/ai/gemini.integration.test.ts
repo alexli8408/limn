@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { test } from "vitest";
+import { hasGeminiKey, liveCheck, loadEnv } from "./live-test";
 
 /**
  * Hits the real Gemini API. Skipped unless a key is present, so CI and a fresh
@@ -16,25 +15,10 @@ import { test } from "vitest";
  * This turns that into a named assertion.
  */
 
-// vitest does not read .env, and requiring callers to export it by hand is the
-// kind of friction that means the test never actually gets run.
-function loadEnv(): void {
-  if (process.env.GEMINI_API_KEY) return;
-  try {
-    const text = readFileSync(resolve(import.meta.dirname, "../../../../.env"), "utf8");
-    for (const line of text.split("\n")) {
-      const match = line.match(/^([A-Z_]+)=(.*)$/);
-      if (match?.[1] && !process.env[match[1]]) process.env[match[1]] = match[2] ?? "";
-    }
-  } catch {
-    // No .env; the tests below will skip.
-  }
-}
-loadEnv();
+loadEnv(import.meta.dirname);
+const hasKey = hasGeminiKey();
 
-const hasKey = Boolean(process.env.GEMINI_API_KEY);
-
-test.skipIf(!hasKey)("generates a well-formed diagram from a prompt", async () => {
+test.skipIf(!hasKey)("generates a well-formed diagram from a prompt", async () => liveCheck(async () => {
   const { diagramFromPrompt } = await import("./gemini");
   const { layoutDiagram } = await import("./layout");
 
@@ -79,9 +63,9 @@ test.skipIf(!hasKey)("generates a well-formed diagram from a prompt", async () =
   assert.ok(!overlapping, "layout produced overlapping nodes");
   // 60s: a Gemini 3.x call reasons before answering, and the retry path adds
   // two backoffs on top. vitest's 5s default fails long before the API would.
-}, 60_000);
+}), 60_000);
 
-test.skipIf(!hasKey)("the configured models are actually reachable", async () => {
+test.skipIf(!hasKey)("the configured models are actually reachable", async () => liveCheck(async () => {
   const key = process.env.GEMINI_API_KEY as string;
   const configured = [
     process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
@@ -108,4 +92,4 @@ test.skipIf(!hasKey)("the configured models are actually reachable", async () =>
       `${model} is not available to this key. Available: ${[...usable].slice(0, 12).join(", ")}`,
     );
   }
-}, 30_000);
+}), 30_000);

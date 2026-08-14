@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Excalidraw,
   CaptureUpdateAction,
@@ -15,6 +15,7 @@ import type { Role, SyncElement } from "@limn/protocol";
 import { useCollab } from "@/lib/collab/useCollab";
 import { useStrokeBeautify } from "@/lib/beautify/useStrokeBeautify";
 import { compileDiagram, tombstone } from "@/lib/ai/compile";
+import { loadBoardFiles, referencedFileIds } from "@/lib/collab/files";
 import type { LimnDiagram } from "@/lib/ai/schema";
 import RemoteCursors from "./RemoteCursors";
 import PresenceBar from "./PresenceBar";
@@ -145,7 +146,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   /* ---------------------------------------------------------------- */
 
   const runBeautifyAi = useCallback(
-    async (mode: "refine" | "recompose", instruction?: string, quality?: "fast" | "high") => {
+    async (instruction?: string, quality?: "fast" | "high") => {
       if (!api || readOnly) return;
 
       const all = api.getSceneElements() as unknown as SyncElement[];
@@ -163,7 +164,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       }
 
       setAiRun({ state: "running", message: "Reading your sketch…" });
-      collab.announceAi("start", mode, props.displayName);
+      collab.announceAi("start", "refine", props.displayName);
 
       try {
         // The model gets a picture as well as coordinates: which arrow points at
@@ -185,7 +186,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             elements: target.map(toSketchElement),
             image,
             instruction,
-            mode,
+            mode: "refine",
             quality: quality ?? "fast",
           }),
         });
@@ -210,9 +211,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             hint:
               payload.diagram.kind === "empty"
                 ? "Draw some shapes and connect them with arrows, then try again."
-                : "Beautify redraws diagrams: boxes and arrows. For a drawing, the Snap toggle in the header cleans up strokes as you draw.",
+                : "Clean up only redraws diagrams. For a drawing like this, try the Illustrate tab, or the Snap toggle in the header to tidy strokes as you draw.",
           });
-          collab.announceAi("done", mode, props.displayName);
+          collab.announceAi("done", "refine", props.displayName);
           return;
         }
 
@@ -240,13 +241,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             model: String(payload.meta.model ?? ""),
           },
         });
-        collab.announceAi("done", mode, props.displayName);
+        collab.announceAi("done", "refine", props.displayName);
       } catch (error) {
         setAiRun({
           state: "error",
           message: error instanceof Error ? error.message : "generation failed",
         });
-        collab.announceAi("error", mode, props.displayName);
+        collab.announceAi("error", "refine", props.displayName);
       }
     },
     [api, readOnly, collab, props.boardId, props.displayName, commit],
@@ -309,6 +310,107 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     [api, readOnly, collab, props.boardId, props.displayName, commit],
   );
 
+  const runIllustrate = useCallback(
+    async (instruction?: string) => {
+      if (!api || readOnly) return;
+
+      const all = api.getSceneElements() as unknown as SyncElement[];
+      const selectedIds = new Set(Object.keys(api.getAppState().selectedElementIds ?? {}));
+      const target = selectedIds.size
+        ? all.filter((el) => selectedIds.has(el.id))
+        : all.filter((el) => !el.isDeleted);
+
+      if (target.length === 0) {
+        setAiRun({ state: "error", message: "Nothing to illustrate. Draw something first." });
+        return;
+      }
+
+      setAiRun({ state: "running", message: "Drawing it properly…" });
+      collab.announceAi("start", "illustrate", props.displayName);
+
+      try {
+        const blob = await exportToBlob({
+          elements: target as never,
+          appState: { exportBackground: true, viewBackgroundColor: "#ffffff" },
+          files: api.getFiles(),
+          mimeType: "image/png",
+          maxWidthOrHeight: 1400,
+        });
+        const source = await blobToBase64(blob);
+
+        const response = await fetch("/api/ai/illustrate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ boardId: props.boardId, image: source, instruction }),
+        });
+        const payload = (await response.json()) as
+          | { fileId: string; image: string; mimeType: string; persisted: boolean;
+              meta: { model: string; latencyMs: number; bytes: number } }
+          | { error: string };
+        if (!response.ok || "error" in payload) {
+          throw new Error("error" in payload ? payload.error : "illustration failed");
+        }
+
+        const dataURL = `data:${payload.mimeType};base64,${payload.image}`;
+        const size = await imageSize(dataURL);
+
+        // Register the bytes before the element, or Excalidraw renders an empty
+        // frame until the next file update arrives.
+        api.addFiles([
+          {
+            id: payload.fileId as never,
+            dataURL: dataURL as never,
+            mimeType: payload.mimeType as never,
+            created: Date.now(),
+          } as never,
+        ]);
+
+        // Placed beside the sketch, matched to its height, so the two can be
+        // compared. The original is never replaced: this is a picture, and
+        // throwing away editable shapes for one would be a bad trade.
+        const bounds = boundsOf(target) ?? { x: 0, y: 0, width: 400, height: 400 };
+        const height = bounds.height || 400;
+        const width = height * (size.width / size.height);
+
+        const placed = convertToExcalidrawElements([
+          {
+            type: "image",
+            fileId: payload.fileId as never,
+            x: bounds.x + bounds.width + 80,
+            y: bounds.y,
+            width,
+            height,
+          } as never,
+        ]) as unknown as SyncElement[];
+
+        commit([...all, ...placed], true);
+        api.scrollToContent(placed as never, { fitToContent: true });
+
+        setAiRun({
+          state: "done",
+          message: payload.persisted
+            ? "Illustrated. It sits beside your sketch, which is untouched."
+            : "Illustrated, but it could not be saved, so it will not survive a reload.",
+          stats: {
+            nodes: 1,
+            edges: 0,
+            aligned: 0,
+            latencyMs: payload.meta.latencyMs,
+            model: payload.meta.model,
+          },
+        });
+        collab.announceAi("done", "illustrate", props.displayName);
+      } catch (error) {
+        setAiRun({
+          state: "error",
+          message: error instanceof Error ? error.message : "illustration failed",
+        });
+        collab.announceAi("error", "illustrate", props.displayName);
+      }
+    },
+    [api, readOnly, collab, props.boardId, props.displayName, commit],
+  );
+
   const runVectorize = useCallback(
     async (file: File) => {
       if (!api || readOnly) return;
@@ -366,6 +468,33 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     [api, readOnly, props.boardId, commit],
   );
 
+  // Images live outside the element array, so nothing syncs them. Fetch whatever
+  // the scene points at but this canvas does not hold, on open and whenever a
+  // remote update introduces a new one.
+  const loadedFiles = useRef(new Set<string>());
+  useEffect(() => {
+    if (!api) return;
+    let cancelled = false;
+
+    const sync = async () => {
+      const scene = api.getSceneElements() as unknown as Record<string, unknown>[];
+      const missing = referencedFileIds(scene).filter((id) => !loadedFiles.current.has(id));
+      if (missing.length === 0) return;
+      missing.forEach((id) => loadedFiles.current.add(id));
+
+      const files = await loadBoardFiles(props.boardId, missing);
+      if (cancelled || files.length === 0) return;
+      api.addFiles(files as never);
+    };
+
+    void sync();
+    const timer = setInterval(() => void sync(), 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [api, props.boardId]);
+
   const initialData = useMemo(
     () => ({
       elements: props.initialElements as never,
@@ -422,11 +551,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-neutral-900/90 px-3 py-1.5 text-xs text-white shadow-lg">
             <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
             {collab.peerActivity.label} is{" "}
-            {collab.peerActivity.mode === "vectorize"
-              ? "tracing a photo"
-              : collab.peerActivity.mode === "prompt"
-                ? "generating a diagram"
-                : "cleaning up the sketch"}
+            {collab.peerActivity.mode === "illustrate"
+              ? "illustrating a sketch"
+              : collab.peerActivity.mode === "vectorize"
+                ? "tracing a photo"
+                : collab.peerActivity.mode === "prompt"
+                  ? "generating a diagram"
+                  : "cleaning up the sketch"}
             …
           </div>
         )}
@@ -437,6 +568,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             onDismiss={() => setAiRun(null)}
             onBeautify={runBeautifyAi}
             onPrompt={runPromptAi}
+            onIllustrate={runIllustrate}
             onVectorize={runVectorize}
           />
         )}
@@ -472,6 +604,15 @@ async function blobToBase64(blob: Blob): Promise<string> {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+function imageSize(dataURL: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve({ width: 1024, height: 1024 });
+    image.src = dataURL;
+  });
 }
 
 function toSketchElement(el: SyncElement) {

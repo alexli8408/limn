@@ -36,6 +36,9 @@ export function serverEnv() {
     geminiApiKey: process.env.GEMINI_API_KEY ?? "",
     geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
     geminiModelPro: process.env.GEMINI_MODEL_PRO ?? "gemini-pro-latest",
+    // Image output, for turning a drawing into a finished illustration. A
+    // separate setting because the text models cannot emit images at all.
+    geminiImageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image",
     visionUrl: process.env.VISION_SERVICE_URL ?? "http://localhost:8000",
     visionApiKey: process.env.VISION_API_KEY ?? "",
   } as const;

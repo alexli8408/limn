@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "vitest";
+import { hasGeminiKey, liveCheck, loadEnv } from "./live-test";
 import type { SketchElement } from "./gemini";
 
 /**
@@ -18,20 +19,8 @@ import type { SketchElement } from "./gemini";
  * it is handed, so that is what these assert.
  */
 
-function loadEnv(): void {
-  if (process.env.GEMINI_API_KEY) return;
-  try {
-    const text = readFileSync(resolve(import.meta.dirname, "../../../../.env"), "utf8");
-    for (const line of text.split("\n")) {
-      const match = line.match(/^([A-Z_]+)=(.*)$/);
-      if (match?.[1] && !process.env[match[1]]) process.env[match[1]] = match[2] ?? "";
-    }
-  } catch {
-    /* no .env; tests skip */
-  }
-}
-loadEnv();
-const hasKey = Boolean(process.env.GEMINI_API_KEY);
+loadEnv(import.meta.dirname);
+const hasKey = hasGeminiKey();
 
 const fixture = (name: string): string =>
   readFileSync(resolve(import.meta.dirname, "__fixtures__", name)).toString("base64");
@@ -52,7 +41,7 @@ const STICK_FIGURE: SketchElement[] = [
 
 test.skipIf(!hasKey)(
   "declines a drawing instead of forcing it into boxes",
-  async () => {
+  async () => liveCheck(async () => {
     const { refineSketch } = await import("./gemini");
 
     const { diagram, meta } = await refineSketch({
@@ -80,13 +69,13 @@ test.skipIf(!hasKey)(
     // a picture of a person.
     const labels = diagram.nodes.map((n) => n.label.toLowerCase());
     assert.ok(!labels.includes("actor"), 'relabelled the figure as "actor"');
-  },
+  }),
   90_000,
 );
 
 test.skipIf(!hasKey)(
   "still recognises a real flowchart",
-  async () => {
+  async () => liveCheck(async () => {
     const { refineSketch } = await import("./gemini");
 
     // Two boxes joined by an arrow, with labels. Unambiguously a diagram, so
@@ -112,6 +101,6 @@ test.skipIf(!hasKey)(
     );
     assert.notEqual(diagram.kind, "drawing", "refused an actual flowchart");
     assert.ok(diagram.nodes.length >= 2, `only ${diagram.nodes.length} nodes`);
-  },
+  }),
   90_000,
 );

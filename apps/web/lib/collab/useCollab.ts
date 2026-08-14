@@ -46,7 +46,7 @@ export interface UseCollabOptions {
 export interface PeerActivity {
   peerId: string;
   label: string;
-  mode: "refine" | "recompose" | "prompt" | "vectorize";
+  mode: "refine" | "recompose" | "prompt" | "vectorize" | "illustrate";
 }
 
 export interface CollabHandle {
@@ -63,7 +63,7 @@ export interface CollabHandle {
   publishCursor: (x: number, y: number, tool?: string, button?: "up" | "down") => void;
   announceAi: (
     phase: "start" | "done" | "error",
-    mode: "refine" | "recompose" | "prompt" | "vectorize",
+    mode: "refine" | "recompose" | "prompt" | "vectorize" | "illustrate",
     label?: string,
   ) => void;
   /** Forces a snapshot write, e.g. before navigating away. */
@@ -266,7 +266,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const announceAi = useCallback(
     (
       phase: "start" | "done" | "error",
-      mode: "refine" | "recompose" | "prompt" | "vectorize",
+      mode: "refine" | "recompose" | "prompt" | "vectorize" | "illustrate",
       label?: string,
     ) => {
       channelRef.current?.send({

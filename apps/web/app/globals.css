@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./landing.css";
 
 :root {
   color-scheme: light dark;

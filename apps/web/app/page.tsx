@@ -1,122 +1,156 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import { startDrawing } from "@/app/actions";
+import StrokeMorph from "@/components/StrokeMorph";
 import type { PlatformStats } from "@/lib/supabase/types";
 
 /**
- * Landing page. The counters are real numbers out of Postgres, not decoration,
- * they are the same aggregates the README quotes.
+ * Landing page.
+ *
+ * Committed to one dark violet world rather than following the viewer's theme.
+ * The canvas itself is a bright working surface, so the page around it reads as
+ * the room the whiteboard is in, and the ink is the only thing that glows.
+ *
+ * The hero runs the actual stroke recogniser rather than describing it.
  */
 
 export const revalidate = 60;
 
-const FEATURES = [
-  {
-    title: "Realtime, no server",
-    body: "Sync rides Supabase Realtime. Convergence, persistence and catch-up are all peer-side: a total order on (version, versionNonce) merges concurrent edits, and the peers elect one of themselves to persist.",
-  },
-  {
-    title: "Strokes that snap",
-    body: "A freehand stroke is classified and replaced in the same frame the pen lifts. 95.8% accurate over a 600-stroke benchmark, and it declines rather than guess, one Ctrl+Z gets your wobble back.",
-  },
-  {
-    title: "Photo to diagram",
-    body: "Photograph a physical whiteboard. OpenCV flattens the perspective, thins the ink to a centreline and traces it into shapes you can actually edit.",
-  },
-  {
-    title: "Beautify, not rewrite",
-    body: "Gemini reads the sketch and returns structure, never raw scene JSON. A deterministic compiler places it, so your arrangement survives, and arrows are genuinely bound.",
-  },
-];
-
-function formatCount(value: number): string {
+const format = (value: number): string => {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
-}
+};
+
+const CAPABILITIES = [
+  {
+    label: "as you draw",
+    title: "Strokes snap themselves",
+    body: "Every freehand stroke is classified the moment you lift the pen and replaced with a real rectangle, ellipse, diamond or arrow. Same frame, in your browser, no round trip. It declines rather than guess, and one undo gives your wobble back.",
+    stat: "95.8%",
+    statLabel: "recognition accuracy",
+  },
+  {
+    label: "together",
+    title: "Realtime without a server",
+    body: "Sync rides Supabase Realtime, which has nowhere to run code. Convergence, saving and catch-up all happen peer-side: concurrent edits merge under a total order, and the peers elect one of themselves to persist the board.",
+    stat: "0",
+    statLabel: "servers to run",
+  },
+  {
+    label: "from paper",
+    title: "Photograph a real whiteboard",
+    body: "OpenCV flattens the perspective, separates ink from board under glare, thins every stroke to its centreline and traces it back into shapes you can move and edit. Not a picture pasted onto the canvas.",
+    stat: "4/4",
+    statLabel: "shapes recovered",
+  },
+  {
+    label: "when it helps",
+    title: "Cleans up, or says it cannot",
+    body: "Hand it a diagram and it redraws the whole thing where you put it, with shared baselines and properly bound arrows. Hand it a drawing and it says so instead of turning your sketch into boxes, then offers to illustrate it instead.",
+    stat: "2",
+    statLabel: "ways to finish a sketch",
+  },
+];
 
 export default async function LandingPage() {
   const supabase = await supabaseServer();
   const { data: auth } = await supabase.auth.getUser();
-  const { data: stats } = await supabase.rpc("platform_stats");
-  const s = stats as PlatformStats | null;
-
-  const counters: { label: string; value: string }[] = s
-    ? [
-        { label: "boards", value: formatCount(s.boards) },
-        { label: "elements synced", value: formatCount(s.elements) },
-        { label: "AI diagrams", value: formatCount(s.ai_generations) },
-        { label: "shapes from photos", value: formatCount(s.vision_shapes) },
-      ]
-    : [];
+  const { data } = await supabase.rpc("platform_stats");
+  const stats = data as PlatformStats | null;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-20">
-      <p className="font-mono text-sm text-neutral-400">limn</p>
+    <div className="landing">
+      <div className="glow" aria-hidden />
 
-      <h1 className="mt-6 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-        A whiteboard that
-        <br />
-        cleans up after you.
-      </h1>
+      <header className="bar">
+        <span className="mark">limn</span>
+        <nav>
+          <a href="https://github.com/alexli8408/limn">source</a>
+          {auth.user && <Link href="/dashboard">boards</Link>}
+        </nav>
+      </header>
 
-      <p className="mt-5 max-w-xl text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
-        Sketch with anyone, in realtime. Rough strokes become clean shapes as you
-        draw, and a whole messy sketch can be redrawn as a proper diagram,
-        without changing what you meant by it.
-      </p>
-
-      <div className="mt-8 flex flex-wrap items-center gap-3">
-        <form action={startDrawing}>
-          <button
-            type="submit"
-            className="rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
-          >
-            Start drawing
-          </button>
-        </form>
-        {auth.user && (
-          <Link
-            href="/dashboard"
-            className="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm font-medium transition hover:border-neutral-500 dark:border-neutral-700"
-          >
-            Your boards
-          </Link>
-        )}
-        <span className="text-xs text-neutral-400">No account needed.</span>
-      </div>
-
-      {counters.length > 0 && (
-        <dl className="mt-14 grid grid-cols-2 gap-x-8 gap-y-6 border-t border-neutral-200 pt-8 sm:grid-cols-4 dark:border-neutral-800">
-          {counters.map((counter) => (
-            <div key={counter.label}>
-              <dd className="font-mono text-2xl font-semibold tabular-nums">
-                {counter.value}
-              </dd>
-              <dt className="mt-0.5 text-xs text-neutral-500">{counter.label}</dt>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      <section className="mt-16 grid gap-8 sm:grid-cols-2">
-        {FEATURES.map((feature) => (
-          <div key={feature.title}>
-            <h2 className="text-sm font-semibold">{feature.title}</h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-              {feature.body}
+      <main>
+        <section className="hero">
+          <div className="hero-copy">
+            <p className="eyebrow">realtime collaborative whiteboard</p>
+            <h1>
+              Draw badly.
+              <br />
+              <em>Leave it looking deliberate.</em>
+            </h1>
+            <p className="lede">
+              Sketch with anyone, live. Rough strokes become clean shapes as you
+              draw, and a whole messy diagram can be redrawn properly without
+              losing what you meant by it.
             </p>
+            <div className="cta">
+              <form action={startDrawing}>
+                <button type="submit" className="primary">
+                  Start drawing
+                </button>
+              </form>
+              <span className="aside">no account, no email, one click</span>
+            </div>
           </div>
-        ))}
-      </section>
 
-      {s && (
-        <p className="mt-16 border-t border-neutral-200 pt-6 font-mono text-xs text-neutral-400 dark:border-neutral-800">
-          AI p50 {s.ai_latency_p50_ms}ms · p95 {s.ai_latency_p95_ms}ms · vision p50{" "}
-          {s.vision_latency_p50_ms}ms · {s.boards_active_24h} boards active in the last
-          24h
-        </p>
-      )}
-    </main>
+          <div className="hero-demo">
+            <StrokeMorph />
+          </div>
+        </section>
+
+        {stats && (
+          <section className="counters" aria-label="Usage">
+            {(
+              [
+                [format(stats.boards), "boards"],
+                [format(stats.elements), "elements synced"],
+                [format(stats.ai_generations), "diagrams generated"],
+                [format(stats.vision_shapes), "shapes off photos"],
+              ] as [string, string][]
+            ).map(([value, label]) => (
+              <div key={label}>
+                <span className="value">{value}</span>
+                <span className="label">{label}</span>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section className="capabilities">
+          {CAPABILITIES.map((item) => (
+            <article key={item.title}>
+              <p className="eyebrow">{item.label}</p>
+              <h2>{item.title}</h2>
+              <p>{item.body}</p>
+              <p className="metric">
+                <strong>{item.stat}</strong>
+                <span>{item.statLabel}</span>
+              </p>
+            </article>
+          ))}
+        </section>
+
+        <section className="closer">
+          <h2>Open a board and scribble something.</h2>
+          <form action={startDrawing}>
+            <button type="submit" className="primary">
+              Start drawing
+            </button>
+          </form>
+        </section>
+      </main>
+
+      <footer className="foot">
+        <span>Excalidraw · Supabase Realtime · OpenCV · Gemini</span>
+        {stats && (
+          <span className="mono">
+            AI p50 {stats.ai_latency_p50_ms}ms · vision p50{" "}
+            {stats.vision_latency_p50_ms}ms · {stats.boards_active_24h} boards active today
+          </span>
+        )}
+      </footer>
+    </div>
   );
 }

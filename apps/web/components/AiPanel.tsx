@@ -19,22 +19,20 @@ export interface AiRun {
 interface Props {
   run: AiRun | null;
   onDismiss: () => void;
-  onBeautify: (
-    mode: "refine" | "recompose",
-    instruction?: string,
-    quality?: "fast" | "high",
-  ) => Promise<void>;
+  onBeautify: (instruction?: string, quality?: "fast" | "high") => Promise<void>;
   onPrompt: (prompt: string, quality?: "fast" | "high") => Promise<void>;
+  onIllustrate: (instruction?: string) => Promise<void>;
   onVectorize: (file: File) => Promise<void>;
 }
 
-type Tab = "beautify" | "prompt" | "photo";
+type Tab = "beautify" | "illustrate" | "prompt" | "photo";
 
 export default function AiPanel(props: Props) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("beautify");
   const [instruction, setInstruction] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("");
   const [quality, setQuality] = useState<"fast" | "high">("fast");
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -63,15 +61,16 @@ export default function AiPanel(props: Props) {
         {(
           [
             ["beautify", "Clean up"],
+            ["illustrate", "Illustrate"],
             ["prompt", "Describe"],
-            ["photo", "From photo"],
+            ["photo", "Photo"],
           ] as [Tab, string][]
         ).map(([key, label]) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`flex-1 px-3 py-2.5 text-xs font-medium transition ${
+            className={`flex-1 px-2 py-2.5 text-[11px] font-medium transition ${
               tab === key
                 ? "border-b-2 border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100"
                 : "text-neutral-400 hover:text-neutral-600"
@@ -94,8 +93,8 @@ export default function AiPanel(props: Props) {
         {tab === "beautify" && (
           <>
             <p className="text-xs leading-relaxed text-neutral-500">
-              Redraws your sketch cleanly, keeping your layout. Select shapes to
-              limit it, or leave nothing selected to do the whole board.
+              Redraws a diagram cleanly and keeps it where you put it. Select
+              shapes to limit it, or select nothing to do the whole board.
             </p>
             <input
               value={instruction}
@@ -103,27 +102,38 @@ export default function AiPanel(props: Props) {
               placeholder="Optional: what to emphasise…"
               className="w-full rounded-md border border-neutral-200 bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700"
             />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void props.onBeautify("refine", instruction || undefined, quality)}
-                className="flex-1 rounded-md bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-              >
-                Keep my layout
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void props.onBeautify("recompose", instruction || undefined, quality)
-                }
-                className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-xs font-medium disabled:opacity-50 dark:border-neutral-700"
-                title="Re-lay out the diagram from scratch"
-              >
-                Re-arrange
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void props.onBeautify(instruction || undefined, quality)}
+              className="w-full rounded-md bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              Clean it up
+            </button>
+          </>
+        )}
+
+        {tab === "illustrate" && (
+          <>
+            <p className="text-xs leading-relaxed text-neutral-500">
+              Redraws a drawing as a finished illustration, keeping your
+              composition. You get a picture, not editable shapes, so it is
+              placed beside your sketch rather than replacing it.
+            </p>
+            <input
+              value={style}
+              onChange={(event) => setStyle(event.target.value)}
+              placeholder="Optional: colourful, flat vector, watercolour…"
+              className="w-full rounded-md border border-neutral-200 bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700"
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void props.onIllustrate(style || undefined)}
+              className="w-full rounded-md bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              Illustrate it
+            </button>
           </>
         )}
 
@@ -175,6 +185,7 @@ export default function AiPanel(props: Props) {
           </>
         )}
 
+        {(tab === "beautify" || tab === "prompt") && (
         <label className="flex items-center gap-2 text-[11px] text-neutral-500">
           <input
             type="checkbox"
@@ -184,6 +195,7 @@ export default function AiPanel(props: Props) {
           />
           Higher quality (slower, uses a stronger model)
         </label>
+        )}
 
         {props.run && (
           <div
