@@ -11,7 +11,7 @@ interface Props {
   isWriter: boolean;
   savedVersion: number;
   lastSavedAt: number | null;
-  shareUrl: string;
+  onShare: () => void;
   role: Role;
   beautifyOn: boolean;
   onToggleBeautify: () => void;
@@ -35,7 +35,6 @@ function relative(at: number | null): string {
 }
 
 export default function PresenceBar(props: Props) {
-  const [copied, setCopied] = useState(false);
   const [, tick] = useState(0);
 
   // Re-render on a timer so "saved 12s ago" does not sit stale until the next
@@ -50,16 +49,6 @@ export default function PresenceBar(props: Props) {
     props.beautifyStats.attempted > 0
       ? Math.round((props.beautifyStats.replaced / props.beautifyStats.attempted) * 100)
       : null;
-
-  const copyShare = async () => {
-    try {
-      await navigator.clipboard.writeText(props.shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   return (
     <header className="z-20 flex h-12 shrink-0 items-center gap-3 border-b border-[var(--ink-line)] bg-[var(--ink-surface)] px-3">
@@ -133,10 +122,10 @@ export default function PresenceBar(props: Props) {
 
         <button
           type="button"
-          onClick={copyShare}
+          onClick={props.onShare}
           className="rounded-sm bg-[var(--ink-accent)] px-2.5 py-1 text-xs font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
         >
-          {copied ? "Copied" : "Share"}
+          Share
         </button>
       </div>
     </header>

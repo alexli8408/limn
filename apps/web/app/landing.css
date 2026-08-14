@@ -119,6 +119,17 @@
   color: var(--ink-accent);
 }
 
+/* Sign-in and the dashboard reuse this shell for its paper, bar and rules, but
+   their headings are page titles rather than a hero. Without this they inherit
+   the hero scale above, which beats a utility class on specificity and wraps a
+   six-word title across three lines. */
+.landing h1.title {
+  font-size: clamp(1.6rem, 3.2vw, 2.05rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.75rem;
+}
+
 .landing .lede {
   font-size: 1.0625rem;
   line-height: 1.62;
@@ -135,12 +146,16 @@
   flex-wrap: wrap;
 }
 
+/* Used on both a submit button and a link, depending on whether there is a
+   session to create a board in, so it has to carry the anchor resets too. */
 .landing .primary {
+  display: inline-block;
   font: inherit;
   font-size: 0.9375rem;
   font-weight: 640;
   letter-spacing: 0.01em;
   color: #0b0813;
+  text-decoration: none;
   background: var(--ink-accent);
   border: 0;
   border-radius: 3px;

@@ -17,10 +17,19 @@ supabase db push
 
 Then in the dashboard:
 
-- **Authentication → Providers → Anonymous sign-ins: enable.** This is the entire
-  onboarding path. A visitor is drawing within one click, with no email step.
-  Anonymous users are real rows in `auth.users`, so they own boards and can be
-  upgraded in place if they later sign up.
+- **Authentication → Sign In / Providers → Google: enable**, with a client ID and
+  secret from the Google Cloud console. The Google client's authorised redirect
+  URI is the callback Supabase prints on that page,
+  `https://<project-ref>.supabase.co/auth/v1/callback`.
+- **Authentication → URL Configuration.** Set **Site URL** to the production
+  origin and add `https://your-app.vercel.app/**` to **Redirect URLs**. The app
+  returns people to `/auth/callback` on whichever host they started from, and
+  Supabase rejects any redirect target that is not on this list, which is what
+  makes preview deployments fail while production works.
+- **Authentication → Sign In / Providers → Email → Confirm email.** On by
+  default, and served by Supabase's shared SMTP at a couple of messages an hour.
+  Point **Project Settings → Authentication → SMTP Settings** at your own sender
+  before launch, or turn confirmation off and accept unverified addresses.
 - **Realtime private channels.** No toggle to hunt for on a current project:
   authorization *is* the RLS policies on `realtime.messages`, which migration
   `...000300_rls.sql` installs. What matters is that the client subscribes with

@@ -129,10 +129,12 @@ cd apps/vision && python3.11 -m venv .venv
 pnpm dev        # web :3000, vision :8000
 ```
 
-In the Supabase dashboard, enable **Authentication → Sign In / Providers →
-Anonymous sign-ins**. That is the one dashboard toggle that matters, and it is
-the entire onboarding path. Realtime private channels need no toggle; the migrations
-install the `realtime.messages` policies that authorize them.
+Two things in the Supabase dashboard, both under **Authentication**. Enable the
+**Google** provider, and decide what to do about **Email → Confirm email**: left
+on, every signup goes through Supabase's shared SMTP, which is capped at a couple
+of messages an hour and fails the signup outright when you hit it. Realtime
+private channels need no toggle; the migrations install the `realtime.messages`
+policies that authorize them.
 
 [docs/SETUP.md](docs/SETUP.md) is the step-by-step from nothing, including which
 dashboard toggles matter and a smoke test that isolates each subsystem.

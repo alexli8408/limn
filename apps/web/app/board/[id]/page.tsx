@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import type { SyncElement } from "@limn/protocol";
 import { supabaseServer } from "@/lib/supabase/server";
-import { publicEnv } from "@/lib/env";
+import { requestOrigin } from "@/lib/origin";
 import BoardCanvasLoader from "@/components/BoardCanvasLoader";
 
 /**
@@ -28,8 +28,10 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
   const { data: auth } = await supabase.auth.getUser();
 
   if (!auth.user) {
+    // Keep the share token on the round trip, so an invitee who has to sign in
+    // first still lands on the board rather than on an empty dashboard.
     const next = shareToken ? `/board/${id}?t=${shareToken}` : `/board/${id}`;
-    redirect(`/?next=${encodeURIComponent(next)}`);
+    redirect(`/signin?next=${encodeURIComponent(next)}`);
   }
 
   // A share token grants nothing until it is redeemed for a collaborator row,
@@ -43,7 +45,7 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
 
   const { data: board } = await supabase
     .from("boards")
-    .select("id, title, owner_id, visibility, share_token")
+    .select("id, title, owner_id, visibility, share_token, link_role")
     .eq("id", id)
     .maybeSingle();
 
@@ -67,7 +69,10 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
     .maybeSingle();
 
   const elements = (snapshot?.elements ?? []) as SyncElement[];
-  const shareUrl = `${publicEnv.siteUrl}/board/${board.id}?t=${board.share_token}`;
+  // Built from the host this request arrived on, so a link copied on localhost
+  // points at localhost and one copied on a preview points at that preview.
+  const origin = await requestOrigin();
+  const shareUrl = `${origin}/board/${board.id}?t=${board.share_token}`;
 
   return (
     <main className="h-full">
@@ -82,6 +87,8 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
         initialElements={elements}
         initialVersion={snapshot?.version ?? 0}
         shareUrl={shareUrl}
+        ownerId={board.owner_id}
+        linkRole={board.link_role}
       />
     </main>
   );

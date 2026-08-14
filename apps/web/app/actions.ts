@@ -3,22 +3,27 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
+import type { BoardRole } from "@/lib/supabase/types";
 
 /**
- * Anonymous sign-in, then a new board, in one round trip from the landing page.
+ * Board lifecycle and sharing.
  *
- * Anonymous auth is the whole onboarding story: a visitor can be drawing on a
- * shared board in one click, with no email step. They are still a real row in
- * auth.users, so they can own boards and be upgraded in place if they sign up.
+ * Everything here needs a signed-in user. Boards used to be created against an
+ * anonymous session, which made them a property of one browser rather than of a
+ * person: clearing cookies or opening a different browser lost the lot, and
+ * there was no way to be invited to anything because there was no stable
+ * identity to invite. Sign-in is now the entry point.
  */
-export async function startDrawing(formData: FormData) {
-  const supabase = await supabaseServer();
 
-  const { data: existing } = await supabase.auth.getUser();
-  if (!existing.user) {
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) throw new Error(`could not start a session: ${error.message}`);
-  }
+async function requireUser(next: string) {
+  const supabase = await supabaseServer();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) redirect(`/signin?next=${encodeURIComponent(next)}`);
+  return { supabase, user: data.user };
+}
+
+export async function startDrawing(formData: FormData) {
+  const { supabase } = await requireUser("/dashboard");
 
   const title = String(formData.get("title") ?? "").trim();
   const { data: board, error } = await supabase.rpc("create_board", {
@@ -31,7 +36,7 @@ export async function startDrawing(formData: FormData) {
 }
 
 export async function renameBoard(boardId: string, title: string) {
-  const supabase = await supabaseServer();
+  const { supabase } = await requireUser("/dashboard");
   const { error } = await supabase
     .from("boards")
     .update({ title: title.trim().slice(0, 200) || "Untitled board" })
@@ -41,8 +46,67 @@ export async function renameBoard(boardId: string, title: string) {
 }
 
 export async function deleteBoard(boardId: string) {
-  const supabase = await supabaseServer();
+  const { supabase } = await requireUser("/dashboard");
   const { error } = await supabase.from("boards").delete().eq("id", boardId);
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard");
+}
+
+/** Leave a board someone else shared with you, without involving its owner. */
+export async function leaveBoard(boardId: string) {
+  const { supabase, user } = await requireUser("/dashboard");
+  const { error } = await supabase
+    .from("board_collaborators")
+    .delete()
+    .eq("board_id", boardId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+}
+
+/* ------------------------------------------------------------------ */
+/* sharing                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Whether the share link hands out editing or viewing.
+ *
+ * Only the owner may call this in effect: the boards_guard_sharing trigger
+ * rejects a link_role change from anyone else, so this is a convenience, not the
+ * enforcement point.
+ */
+export async function setLinkRole(boardId: string, role: BoardRole) {
+  if (role !== "editor" && role !== "viewer") throw new Error("invalid link role");
+  const { supabase } = await requireUser(`/board/${boardId}`);
+
+  const { error } = await supabase
+    .from("boards")
+    .update({ link_role: role })
+    .eq("id", boardId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/board/${boardId}`);
+}
+
+/** Invalidates the old link. Anyone already admitted keeps their access. */
+export async function rotateShareLink(boardId: string): Promise<string> {
+  const { supabase } = await requireUser(`/board/${boardId}`);
+  const { data, error } = await supabase.rpc("rotate_share_token", {
+    p_board_id: boardId,
+  });
+  if (error || !data) throw new Error(error?.message ?? "could not rotate the link");
+  revalidatePath(`/board/${boardId}`);
+  return data;
+}
+
+/** Removes a collaborator's access outright, rather than just rotating the link. */
+export async function removeCollaborator(boardId: string, userId: string) {
+  const { supabase } = await requireUser(`/board/${boardId}`);
+  const { error } = await supabase
+    .from("board_collaborators")
+    .delete()
+    .eq("board_id", boardId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/board/${boardId}`);
 }

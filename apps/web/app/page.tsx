@@ -32,8 +32,8 @@ const SPEC = [
   },
   {
     key: "together",
-    title: "Realtime without a server",
-    body: "Sync rides Supabase Realtime, which has nowhere to run code. Convergence, saving and catch-up all happen peer-side: concurrent edits merge under a total order, and the peers elect one of themselves to persist the board.",
+    title: "Invite anyone, draw at once",
+    body: "Send someone the board link. They sign in, appear on the canvas with a named cursor, and every stroke lands on both screens as it is drawn. Sync rides Supabase Realtime, which has nowhere to run code, so convergence, saving and catch-up all happen peer-side: concurrent edits merge under a total order, and the peers elect one of themselves to persist the board.",
     value: "0",
     unit: "servers",
   },
@@ -68,7 +68,11 @@ export default async function LandingPage() {
           <span className="mark">limn</span>
           <nav>
             <a href="https://github.com/alexli8408/limn">source</a>
-            {auth.user && <Link href="/dashboard">boards</Link>}
+            {auth.user ? (
+              <Link href="/dashboard">boards</Link>
+            ) : (
+              <Link href="/signin">sign in</Link>
+            )}
           </nav>
         </header>
         <hr className="rule" />
@@ -88,12 +92,20 @@ export default async function LandingPage() {
                 without losing what you meant by it.
               </p>
               <div className="cta">
-                <form action={startDrawing}>
-                  <button type="submit" className="primary">
+                {auth.user ? (
+                  <form action={startDrawing}>
+                    <button type="submit" className="primary">
+                      New board
+                    </button>
+                  </form>
+                ) : (
+                  <Link href="/signin" className="primary">
                     Start drawing
-                  </button>
-                </form>
-                <span className="aside">no account · no email · one click</span>
+                  </Link>
+                )}
+                <span className="aside">
+                  {auth.user ? "signed in" : "google or email · free"}
+                </span>
               </div>
             </div>
 
@@ -136,11 +148,17 @@ export default async function LandingPage() {
 
           <section className="closer">
             <h2>Open a board and scribble something.</h2>
-            <form action={startDrawing}>
-              <button type="submit" className="primary">
+            {auth.user ? (
+              <form action={startDrawing}>
+                <button type="submit" className="primary">
+                  New board
+                </button>
+              </form>
+            ) : (
+              <Link href="/signin" className="primary">
                 Start drawing
-              </button>
-            </form>
+              </Link>
+            )}
           </section>
         </main>
 

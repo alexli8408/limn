@@ -18,6 +18,7 @@ import { compileDiagram, tombstone } from "@/lib/ai/compile";
 import type { LimnDiagram } from "@/lib/ai/schema";
 import RemoteCursors from "./RemoteCursors";
 import PresenceBar from "./PresenceBar";
+import ShareDialog from "./ShareDialog";
 import AiPanel, { type AiRun } from "./AiPanel";
 import "@excalidraw/excalidraw/index.css";
 
@@ -36,12 +37,15 @@ export interface BoardCanvasProps {
   initialElements: SyncElement[];
   initialVersion: number;
   shareUrl: string;
+  ownerId: string;
+  linkRole: Role;
 }
 
 export default function BoardCanvas(props: BoardCanvasProps) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [beautifyOn, setBeautifyOn] = useState(true);
   const [aiRun, setAiRun] = useState<AiRun | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const readOnly = props.role === "viewer";
 
@@ -388,12 +392,23 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         isWriter={collab.isWriter}
         savedVersion={collab.savedVersion}
         lastSavedAt={collab.lastSavedAt}
-        shareUrl={props.shareUrl}
+        onShare={() => setSharing(true)}
         role={props.role}
         beautifyOn={beautifyOn}
         onToggleBeautify={() => setBeautifyOn((v) => !v)}
         beautifyStats={beautify.stats}
       />
+
+      {sharing && (
+        <ShareDialog
+          boardId={props.boardId}
+          shareUrl={props.shareUrl}
+          linkRole={props.linkRole}
+          isOwner={props.userId === props.ownerId}
+          ownerId={props.ownerId}
+          onClose={() => setSharing(false)}
+        />
+      )}
 
       <div className="relative flex-1">
         <Excalidraw

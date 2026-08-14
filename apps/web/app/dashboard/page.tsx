@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
-import { startDrawing } from "@/app/actions";
+import { startDrawing, deleteBoard, leaveBoard } from "@/app/actions";
+import { signOut } from "@/app/auth/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const supabase = await supabaseServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/");
+  if (!auth.user) redirect("/signin?next=%2Fdashboard");
 
   // RLS decides what is visible here; no owner filter is needed, and adding one
   // would hide boards shared with this user.
@@ -24,60 +25,125 @@ export default async function DashboardPage() {
     .eq("id", auth.user.id)
     .maybeSingle();
 
+  const mine = (boards ?? []).filter((b) => b.owner_id === auth.user.id);
+  const shared = (boards ?? []).filter((b) => b.owner_id !== auth.user.id);
+
+  // Bound to the row they sit in, so each card gets its own submit target
+  // without a client component just to hold a board id.
+  async function removeBoard(formData: FormData) {
+    "use server";
+    await deleteBoard(String(formData.get("id")));
+  }
+
+  async function leave(formData: FormData) {
+    "use server";
+    await leaveBoard(String(formData.get("id")));
+  }
+
   return (
-    <main className="mx-auto max-w-4xl px-6 py-14">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <Link href="/" className="font-mono text-sm font-bold uppercase tracking-[0.14em] text-[var(--ink-faint)] transition hover:text-[var(--ink-accent)]">
+    <div className="landing min-h-screen">
+      <div className="paper" aria-hidden />
+
+      <div className="shell relative">
+        <header className="bar">
+          <Link href="/" className="mark text-[var(--ink-text)] no-underline">
             limn
           </Link>
-          <h1 className="mt-2 text-3xl font-bold tracking-[-0.03em] text-[var(--ink-text)]">Your boards</h1>
-          <p className="mt-1.5 text-sm text-[var(--ink-dim)]">
-            {profile?.is_guest
-              ? "You are signed in as a guest. Boards stay in this browser session."
-              : `Signed in as ${profile?.display_name ?? "you"}.`}
-          </p>
-        </div>
-
-        <form action={startDrawing}>
-          <button
-            type="submit"
-            className="rounded-sm bg-[var(--ink-accent)] px-4 py-2 text-sm font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
-          >
-            New board
-          </button>
-        </form>
-      </div>
-
-      {!boards || boards.length === 0 ? (
-        <p className="mt-12 border border-dashed border-[var(--ink-line)] p-12 text-center text-sm text-[var(--ink-faint)]">
-          No boards yet. Create one and start sketching.
-        </p>
-      ) : (
-        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-          {boards.map((board) => (
-            <li key={board.id}>
-              <Link
-                href={`/board/${board.id}`}
-                className="block border border-[var(--ink-line)] bg-[var(--ink-surface)] p-4 transition hover:border-[var(--ink-accent)]"
+          <nav className="items-center gap-5">
+            <span className="text-[var(--ink-dim)]">
+              {profile?.display_name ?? auth.user.email}
+            </span>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="font-mono text-[0.7rem] uppercase tracking-[0.1em] text-[var(--ink-faint)] transition hover:text-[var(--ink-accent-hot)]"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="truncate font-medium">{board.title}</span>
-                  {board.owner_id !== auth.user.id && (
-                    <span className="shrink-0 border border-[var(--ink-line)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-                      shared
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-                  {board.element_count} elements ·{" "}
-                  {new Date(board.updated_at).toLocaleDateString()}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+                sign out
+              </button>
+            </form>
+          </nav>
+        </header>
+        <hr className="rule" />
+
+        <main className="pb-24 pt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="title text-[var(--ink-text)]">Your boards</h1>
+              <p className="mt-1.5 text-sm text-[var(--ink-dim)]">
+                {mine.length + shared.length === 0
+                  ? "Nothing here yet. Make one and send someone the link."
+                  : `${mine.length} of your own, ${shared.length} shared with you.`}
+              </p>
+            </div>
+            <form action={startDrawing}>
+              <button type="submit" className="primary">
+                New board
+              </button>
+            </form>
+          </div>
+
+          <Section title="Yours" boards={mine} action={removeBoard} verb="Delete" />
+          <Section title="Shared with you" boards={shared} action={leave} verb="Leave" />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+interface BoardSummary {
+  id: string;
+  title: string;
+  element_count: number;
+  updated_at: string;
+}
+
+function Section({
+  title,
+  boards,
+  action,
+  verb,
+}: {
+  title: string;
+  boards: BoardSummary[];
+  action: (formData: FormData) => Promise<void>;
+  verb: string;
+}) {
+  if (boards.length === 0) return null;
+
+  return (
+    <section className="mt-12">
+      <h2 className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">
+        {title}
+      </h2>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {boards.map((board) => (
+          <li
+            key={board.id}
+            className="group relative border border-[var(--ink-line)] bg-[var(--ink-surface)] transition hover:border-[var(--ink-accent)]"
+          >
+            <Link href={`/board/${board.id}`} className="block p-4">
+              <span className="block truncate pr-6 font-medium text-[var(--ink-text)]">
+                {board.title}
+              </span>
+              <span className="mt-1.5 block font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+                {board.element_count} elements ·{" "}
+                {new Date(board.updated_at).toLocaleDateString()}
+              </span>
+            </Link>
+            <form action={action} className="absolute right-2 top-2">
+              <input type="hidden" name="id" value={board.id} />
+              <button
+                type="submit"
+                title={verb}
+                aria-label={`${verb} ${board.title}`}
+                className="rounded-sm px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--ink-bad)] focus-visible:opacity-100"
+              >
+                {verb}
+              </button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

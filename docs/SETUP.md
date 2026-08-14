@@ -102,13 +102,47 @@ It should apply five migrations in order:
 20260814000500_grants.sql     explicit table privileges
 ```
 
-### 2c. Turn on anonymous sign-ins
+### 2c. Set up sign-in
 
-Dashboard → **Authentication → Sign In / Providers → Anonymous sign-ins →
-enable.**
+Boards belong to people, not to browsers, so there is no way in without an
+account. Two providers, and you want both.
 
-This is not optional. It is the entire onboarding path. Every "Start drawing"
-button calls `signInAnonymously()`. Without it the landing page throws.
+**Email and password.** On by default. One setting needs your attention:
+
+Dashboard → **Authentication → Sign In / Providers → Email → Confirm email.**
+
+Leave it on and Supabase emails every new account a confirmation link, through
+a shared SMTP server capped at a couple of messages an hour. That cap is not a
+per-project quota you can wait out under load, it returns
+`over_email_send_rate_limit` and the signup fails outright. For a project people
+are going to try from a link, either:
+
+- turn **Confirm email** off, so an account works the moment it is created, or
+- set your own SMTP under **Project Settings → Authentication → SMTP Settings**,
+  which is the right answer if this is going in front of real users.
+
+**Google.** Dashboard → **Authentication → Sign In / Providers → Google →
+enable**, then paste in a client ID and secret from the Google Cloud console
+(APIs & Services → Credentials → OAuth client ID → Web application).
+
+Google needs two lists filled in, and both matter:
+
+- *Authorised JavaScript origins*: `http://localhost:3000` and your Vercel
+  domain.
+- *Authorised redirect URIs*: the callback URL Supabase shows you on that same
+  provider page, which looks like
+  `https://<project-ref>.supabase.co/auth/v1/callback`.
+
+Then, back in Supabase, Dashboard → **Authentication → URL Configuration**:
+
+- **Site URL**: your production origin.
+- **Redirect URLs**: add `http://localhost:3000/**` and
+  `https://your-app.vercel.app/**`. The app sends people back to
+  `/auth/callback`, and Supabase refuses any redirect target not on this list.
+
+**Anonymous sign-ins** are no longer used and can be left off. If you enabled
+them for an earlier version, boards owned by those guest sessions are still in
+the database but nobody can sign in as their owner again.
 
 ### 2d. Grab your keys
 
@@ -239,17 +273,21 @@ the vision service on **:8000**.
 Open http://localhost:3000 and work down this list. Each step exercises a
 different subsystem, so a failure tells you which one.
 
-1. **Click "Start drawing."** → lands on a board.
-   *Exercises: anonymous auth, `create_board` RPC, RLS.*
+1. **Click "Start drawing," then create an account or use Google.** → lands on
+   the dashboard, and "New board" opens a board.
+   *Exercises: auth, the profile trigger, `create_board` RPC, RLS.*
 2. **Draw a rough rectangle freehand.** → snaps to a clean rectangle when you
    lift the pen. The header shows `Snap on 1`.
    *Exercises: the client recogniser. No network involved.*
 3. **Draw a deliberate squiggle.** → stays a squiggle.
    *Exercises: the recogniser declining, which matters as much as accepting.*
 4. **Ctrl+Z after a snap.** → your original wobbly stroke returns.
-5. **Copy the share link, open it in a private window.** → two cursors, and
-   drawing in one window appears in the other.
-   *Exercises: Realtime broadcast, presence, the merge.*
+5. **Hit Share, copy the link, open it in a private window and sign in as
+   somebody else.** → two cursors, and drawing in one window appears in the
+   other within about a second. The board now shows up under "Shared with you"
+   on the second account's dashboard.
+   *Exercises: share tokens, `claim_board_access`, Realtime broadcast, presence,
+   the merge.*
 6. **Wait ~5 seconds, reload.** → your drawing is still there, header shows a
    bumped `v` number.
    *Exercises: writer election and the snapshot compare-and-swap.*
@@ -392,7 +430,9 @@ supabase db push          # apply new migrations
 
 | Symptom | Cause |
 |---|---|
-| Landing page throws on "Start drawing" | Anonymous sign-ins not enabled (Phase 2c) |
+| Signup fails with `over_email_send_rate_limit` | Supabase's shared SMTP is capped at a couple of mails an hour. Turn off **Confirm email** or add your own SMTP (Phase 2c) |
+| Google sign-in returns to `/signin` with an error | The callback URL is not in Supabase's **Redirect URLs**, or the Supabase callback is missing from the Google client's redirect URIs (Phase 2c) |
+| Signed in, but the board says you cannot read it | The share link was opened without `?t=`, so no collaborator row was ever created |
 | Subscribe fails with a policy error | `...000300_rls.sql` didn't apply; re-run `db push` |
 | Second window shows no cursor | Check both are the *same* board id; a share link without `?t=` grants nothing |
 | Snapping never fires | Only freehand (pencil) strokes are recognised. The rectangle *tool* is already a rectangle |
