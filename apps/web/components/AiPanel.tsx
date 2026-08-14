@@ -36,12 +36,18 @@ export default function AiPanel(props: Props) {
 
   const busy = props.run?.state === "running";
 
+  // Excalidraw owns the bottom-right corner: its help button sits 16px in from
+  // each edge and is 36px square. Anchoring here at bottom-5 put this button
+  // straight on top of it. Clearing the whole 52px that corner occupies, rather
+  // than nudging sideways, keeps the panel clear of it too once it opens.
+  const anchor = "absolute bottom-16 right-5 z-20";
+
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute bottom-5 right-5 z-20 flex items-center gap-2 rounded-sm bg-[var(--ink-accent)] px-4 py-2.5 text-sm font-semibold text-[#0b0813] shadow-lg transition hover:bg-[var(--ink-accent-hot)]"
+        className={`${anchor} flex items-center gap-2 rounded-sm bg-[var(--ink-accent)] px-4 py-2.5 text-sm font-semibold text-[#0b0813] shadow-lg transition hover:bg-[var(--ink-accent-hot)]`}
       >
         {busy ? (
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -54,7 +60,7 @@ export default function AiPanel(props: Props) {
   }
 
   return (
-    <div className="absolute bottom-5 right-5 z-20 w-[22rem] overflow-hidden rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] shadow-2xl">
+    <div className={`${anchor} w-[22rem] overflow-hidden rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] shadow-2xl`}>
       <div className="flex items-center border-b border-[var(--ink-line)]">
         {(
           [

@@ -148,7 +148,14 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         onSaved: (version, at) => {
           setSavedVersion(version);
           setLastSavedAt(at);
-          channelRef.current?.send({
+          // Only announce over a joined socket. The first save can land before
+          // the channel finishes joining, and send() on an unjoined channel
+          // silently falls back to a REST post, which logs a deprecation warning
+          // on every board open. Peers that miss this one pick the version up
+          // from the next save or from their own HELLO.
+          const channel = channelRef.current;
+          if (channel?.state !== "joined") return;
+          channel.send({
             type: "broadcast",
             event: BoardEvent.SAVED,
             payload: {
