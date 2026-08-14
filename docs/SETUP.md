@@ -136,7 +136,24 @@ PGUSER=$(whoami) ./supabase/tests/run.sh    # expect: PASS
 ## Phase 3. Gemini key
 
 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → **Create API
-key** → copy it. Free tier is fine; it is rate-limited per minute, not per month.
+key** → copy it.
+
+**What the free tier actually gives you**, measured against a real key rather
+than read off a docs page:
+
+| | Free tier |
+|---|---|
+| Text models (`gemini-3.6-flash`, etc.) | 20 requests per day, **per model** |
+| Image models (`gemini-3.1-flash-image`, etc.) | none at all |
+
+The daily allowance is scoped per model, so switching `GEMINI_MODEL` to
+`gemini-3.1-flash-lite` or `gemini-3.5-flash` gives you a fresh 20. That is the
+practical way to keep demoing after you run out.
+
+Image generation is the exception: every image model returns 429 listing quotas
+with no value, on a key that has never called them, which is how Google reports
+"no allowance on this tier". So the **Illustrate** feature needs billing enabled.
+Clean up, Describe, Photo, Snap and everything else work on the free tier.
 
 ---
 

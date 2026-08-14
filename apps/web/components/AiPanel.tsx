@@ -120,6 +120,10 @@ export default function AiPanel(props: Props) {
               composition. You get a picture, not editable shapes, so it is
               placed beside your sketch rather than replacing it.
             </p>
+            <p className="rounded-md bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              Needs billing enabled on your Google AI Studio project. Image
+              generation has no free-tier allowance, unlike everything else here.
+            </p>
             <input
               value={style}
               onChange={(event) => setStyle(event.target.value)}

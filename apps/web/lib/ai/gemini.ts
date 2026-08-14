@@ -404,6 +404,17 @@ The author also asked: ${input.instruction}`
         `Image model "${model}" is unavailable to this API key. Set GEMINI_IMAGE_MODEL to one your key can reach.`,
       );
     }
+    if (status === 429) {
+      // Image generation is not part of the Gemini free tier. Measured across
+      // gemini-3.1-flash-image, gemini-2.5-flash-image and gemini-3-pro-image:
+      // every one returns 429 listing per-day, per-minute and input-token
+      // quotas with no value at all, including on a key that had never called
+      // them. A missing quotaValue means no allowance exists, not that one was
+      // used up, so this is a billing state and no retry or model swap fixes it.
+      throw new Error(
+        "Illustrate needs billing enabled on your Google AI Studio project. Image generation has no free-tier allowance, unlike the text models. Everything else in the app keeps working without it.",
+      );
+    }
     throw error;
   }
 }
