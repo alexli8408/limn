@@ -14,7 +14,7 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { Role, SyncElement } from "@limn/protocol";
 import { useCollab } from "@/lib/collab/useCollab";
 import { useStrokeBeautify } from "@/lib/beautify/useStrokeBeautify";
-import { compileDiagram, tombstone } from "@/lib/ai/compile";
+import { compileDiagram, inkOf, tombstone } from "@/lib/ai/compile";
 import type { LimnDiagram } from "@/lib/ai/schema";
 import RemoteCursors from "./RemoteCursors";
 import PresenceBar from "./PresenceBar";
@@ -224,6 +224,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         const compiled = compileDiagram(payload.diagram, {
           existing: all,
           origin: bounds ? { x: bounds.x, y: bounds.y } : { x: 0, y: 0 },
+          // Redraw in whatever the sketch was drawn in, so cleaning up a red
+          // diagram does not hand back a black one.
+          ink: inkOf(target),
         });
 
         if (compiled.elements.length === 0) {
@@ -286,7 +289,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           ? { x: existing.x, y: existing.y + existing.height + 120 }
           : { x: 120, y: 120 };
 
-        const compiled = compileDiagram(payload.diagram, { existing: all, origin });
+        // No source sketch to take colour from, so follow whatever the rest of
+        // the board is drawn in and let a new diagram match its surroundings.
+        const compiled = compileDiagram(payload.diagram, {
+          existing: all,
+          origin,
+          ink: inkOf(all),
+        });
         commit([...all, ...compiled.elements], true);
         api.scrollToContent(compiled.elements as never, { fitToContent: true });
 
