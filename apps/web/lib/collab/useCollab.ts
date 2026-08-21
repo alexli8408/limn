@@ -78,6 +78,12 @@ export interface CollabHandle {
   isWriter: boolean;
   savedVersion: number;
   lastSavedAt: number | null;
+  /**
+   * The scene is past MAX_ELEMENTS_PER_BOARD. Advisory: nothing is dropped or
+   * blocked, but sync and saving both get slower from here, and a board this
+   * size is usually an accident rather than a drawing.
+   */
+  atCapacity: boolean;
   peerId: string;
   /** Call on every Excalidraw change; internally coalesced and diffed. */
   publishScene: (elements: readonly SyncElement[]) => void;
@@ -150,6 +156,12 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const [savedVersion, setSavedVersion] = useState(initialVersion);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   /**
+   * True while the scene is larger than MAX_ELEMENTS_PER_BOARD. Reported, not
+   * enforced, see the note in publishScene. The ref shadows the state so the
+   * hot path can compare without reading a value it would have to depend on.
+   */
+  const [atCapacity, setAtCapacity] = useState(false);
+  /**
    * Bumped to force a fresh subscribe.
    *
    * Supabase reconnects on its own, but not always promptly and not at all once
@@ -163,9 +175,9 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const joinedAt = useMemo(() => Date.now(), []);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const sceneRef = useRef<SyncElement[]>(initialElements);
+  const sceneRef = useRef<readonly SyncElement[]>(initialElements);
   const sentVersions = useRef(new Map<string, number>());
-  const pendingScene = useRef<SyncElement[] | null>(null);
+  const pendingScene = useRef<readonly SyncElement[] | null>(null);
   const pendingCursor = useRef<CursorState | null>(null);
   const sceneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -175,6 +187,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   /** Cheap identity of the roster, so an unchanged one does not re-render. */
   const rosterKey = useRef("");
   const lastFingerprint = useRef(sceneFingerprint(initialElements));
+  const overCapacity = useRef(false);
 
   // Kept in refs as well as state: the channel callbacks are registered once and
   // would otherwise capture the first render's values forever.
@@ -291,10 +304,34 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
       if (fingerprint === lastFingerprint.current) return;
       lastFingerprint.current = fingerprint;
 
-      const snapshot = elements.slice(0, MAX_ELEMENTS_PER_BOARD);
-      sceneRef.current = snapshot;
-      pendingScene.current = snapshot;
-      if (isWriterRef.current) snapshots.mark(snapshot);
+      /**
+       * This used to be `elements.slice(0, MAX_ELEMENTS_PER_BOARD)`, which is a
+       * safety valve pointed at the user's own work.
+       *
+       * The truncated list went to two places. As the merge base it meant every
+       * element past the ceiling stopped syncing, so peers quietly held
+       * different boards. As the argument to `snapshots.mark` it was far worse:
+       * the persister writes what it is given, so the next save replaced the
+       * stored scene with the cut-down one and the remainder was gone from the
+       * database permanently. No warning, no error, and undo cannot reach across
+       * a save.
+       *
+       * Nothing downstream needed the cut. `save_board_snapshot` takes jsonb and
+       * has no element limit of its own, and outgoing frames are already bounded
+       * by `chunkElements`, on bytes and on count, which is where a real wire
+       * limit belongs. So the ceiling stays a threshold to report at rather than
+       * one to cut at: the board is unusual above it and worth saying so, but
+       * that is the user's call to make, and dropping their shapes to make the
+       * number smaller is not a fix for anything.
+       */
+      sceneRef.current = elements;
+      pendingScene.current = elements;
+      const over = elements.length > MAX_ELEMENTS_PER_BOARD;
+      if (over !== overCapacity.current) {
+        overCapacity.current = over;
+        setAtCapacity(over);
+      }
+      if (isWriterRef.current) snapshots.mark(elements);
 
       if (sceneTimer.current === null) {
         sceneTimer.current = setTimeout(() => void flushScene(), SCENE_FLUSH_INTERVAL_MS);
@@ -649,6 +686,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     isWriter,
     savedVersion,
     lastSavedAt,
+    atCapacity,
     peerId,
     publishScene,
     publishCursor,

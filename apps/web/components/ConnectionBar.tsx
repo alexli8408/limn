@@ -4,6 +4,8 @@ import type { ConnectionStatus } from "@limn/protocol";
 
 interface Props {
   status: ConnectionStatus;
+  /** Scene is past MAX_ELEMENTS_PER_BOARD. Advisory, nothing is being dropped. */
+  atCapacity: boolean;
   onRetry: () => void;
 }
 
@@ -19,9 +21,33 @@ interface Props {
  *
  * Nothing renders on the calm path; the header badge covers connected and
  * connecting on its own.
+ *
+ * The oversized-board notice shares this slot rather than stacking a second bar
+ * above the canvas. Only one of the two can be the more useful thing to read,
+ * and it is always the connection: a board that is slow is still a board, and
+ * being told it is large while the socket is down would bury the sentence that
+ * matters.
  */
-export default function ConnectionBar({ status, onRetry }: Props) {
-  if (status === "connected" || status === "connecting") return null;
+export default function ConnectionBar({ status, atCapacity, onRetry }: Props) {
+  const connected = status === "connected" || status === "connecting";
+
+  if (connected) {
+    if (!atCapacity) return null;
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="z-30 flex shrink-0 items-center gap-3 border-b border-[var(--ink-warn)]/40 bg-[var(--ink-warn)]/15 px-3 py-2 text-xs text-[var(--ink-warn)]"
+      >
+        <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[var(--ink-warn)]" />
+        <span className="flex-1 leading-relaxed">
+          This board has grown very large. Nothing has been dropped, but syncing
+          and saving will get slower from here. Splitting it across two boards
+          will feel better than carrying on in one.
+        </span>
+      </div>
+    );
+  }
 
   const message =
     status === "reconnecting"

@@ -4,6 +4,8 @@ import {
   ChunkAssembler,
   chunkElements,
   collectDelta,
+  MAX_BROADCAST_BYTES,
+  MAX_ELEMENTS_PER_UPDATE,
   electWriter,
   flattenPresence,
   reconcile,
@@ -284,6 +286,28 @@ test("presence flattening dedupes a fast rejoin, newest wins", () => {
 /* ------------------------------------------------------------------ */
 /* chunking                                                            */
 /* ------------------------------------------------------------------ */
+
+test("a frame never carries more elements than the receiver will accept", () => {
+  // Small enough that the byte budget alone would never split these: 500 of them
+  // are well under MAX_BROADCAST_BYTES. Only the count ceiling can.
+  const many: SyncElement[] = Array.from({ length: 500 }, (_, i) => el(`e${i}`, 1, i));
+
+  const { parts } = chunkElements(many, MAX_BROADCAST_BYTES, 100);
+
+  assert.equal(parts.length, 5, "should split on count, not on size");
+  for (const part of parts) {
+    assert.ok(part.length <= 100, `frame of ${part.length} exceeds the cap`);
+  }
+  assert.equal(parts.flat().length, many.length, "no element may be lost");
+
+  // The real defaults have to satisfy the same thing, because this is what
+  // sceneEventSchema validates on arrival. A frame over it is dropped by the
+  // receiver, and takes the rest of its chunk group down with it.
+  const { parts: real } = chunkElements(many);
+  for (const part of real) {
+    assert.ok(part.length <= MAX_ELEMENTS_PER_UPDATE, "default cap must hold");
+  }
+});
 
 test("oversized deltas split and reassemble exactly", () => {
   const big: SyncElement[] = Array.from({ length: 60 }, (_, i) =>

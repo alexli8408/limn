@@ -598,7 +598,11 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         beautifyStats={beautify.stats}
       />
 
-      <ConnectionBar status={collab.status} onRetry={collab.reconnect} />
+      <ConnectionBar
+        status={collab.status}
+        atCapacity={collab.atCapacity}
+        onRetry={collab.reconnect}
+      />
 
       {sharing && (
         <ShareDialog
