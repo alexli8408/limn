@@ -9,11 +9,38 @@ import { recordGeneration } from "@/lib/ai/usage";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MIN_PROMPT = 3;
+const MAX_PROMPT = 2000;
+
 const bodySchema = z.object({
   boardId: z.string().uuid(),
-  prompt: z.string().min(3).max(2000),
+  prompt: z.string().min(MIN_PROMPT).max(MAX_PROMPT),
   quality: z.enum(["fast", "high"]).default("fast"),
 });
+
+/**
+ * The prompt length, checked before Zod gets a say.
+ *
+ * Zod states it as "String must contain at most 2000 character(s)", and that
+ * string went straight into the panel, where it reads as a bug rather than a
+ * limit and says nothing about what to do next.
+ */
+function promptComplaint(raw: unknown): string | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { prompt } = raw as { prompt?: unknown };
+  if (typeof prompt !== "string") return null;
+
+  if (prompt.trim().length < MIN_PROMPT) {
+    return "Describe the diagram you want first, even in a few words.";
+  }
+  if (prompt.length > MAX_PROMPT) {
+    return (
+      `That description is ${prompt.length} characters, more than one request carries. ` +
+      `Cut it to ${MAX_PROMPT} or fewer and describe only the structure you want.`
+    );
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   const supabase = await supabaseServer();
@@ -24,10 +51,20 @@ export async function POST(request: Request) {
 
   let body: z.infer<typeof bodySchema>;
   try {
-    body = bodySchema.parse(await request.json());
+    const raw: unknown = await request.json();
+    const complaint = promptComplaint(raw);
+    if (complaint) return NextResponse.json({ error: complaint }, { status: 422 });
+    body = bodySchema.parse(raw);
   } catch (error) {
-    const detail = error instanceof z.ZodError ? error.issues[0]?.message : "invalid body";
-    return NextResponse.json({ error: detail ?? "invalid body" }, { status: 422 });
+    // Anything Zod has left to say names fields the user has never seen, so it
+    // goes to the log and they get a sentence they can act on.
+    if (error instanceof z.ZodError) {
+      console.warn("[limn] prompt rejected a body:", error.issues[0]?.message);
+    }
+    return NextResponse.json(
+      { error: "That request could not be read. Reload the board and try again." },
+      { status: 422 },
+    );
   }
 
   const { data: canEdit } = await supabase.rpc("can_edit_board", {
@@ -58,6 +95,8 @@ export async function POST(request: Request) {
       prompt: body.prompt.slice(0, 2000),
       output_elements: diagram.nodes.length + diagram.edges.length,
       latency_ms: result.meta.latencyMs,
+      attempts: result.meta.attempts,
+      fell_back: result.meta.fellBack,
       prompt_tokens: result.meta.promptTokens,
       output_tokens: result.meta.outputTokens,
       ok: true,

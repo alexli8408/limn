@@ -112,6 +112,8 @@ export type Database = {
           input_elements: number;
           output_elements: number;
           latency_ms: number;
+          attempts: number;
+          fell_back: boolean;
           prompt_tokens: number;
           output_tokens: number;
           ok: boolean;
@@ -127,6 +129,8 @@ export type Database = {
           input_elements?: number;
           output_elements?: number;
           latency_ms?: number;
+          attempts?: number;
+          fell_back?: boolean;
           prompt_tokens?: number;
           output_tokens?: number;
           ok?: boolean;
