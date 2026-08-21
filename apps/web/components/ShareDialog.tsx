@@ -50,13 +50,27 @@ export default function ShareDialog(props: Props) {
    * underneath into a dialog they could not see they were in, and could tab
    * straight back out of it while it still covered the screen.
    */
+  /**
+   * `onClose` through a ref so this effect can depend on nothing.
+   *
+   * It used to depend on `props`, and ShareDialog is rendered inline from
+   * BoardCanvas with an inline arrow for onClose, so `props` was a new object
+   * on every render of the board. Every peer cursor, every status tick, every
+   * keystroke in the board title re-ran the effect: listener torn down and
+   * reattached, and worse, focus yanked back to the URL field and its contents
+   * re-selected. Anyone who tabbed to the visibility buttons while a peer was
+   * moving found themselves back at the top with the link highlighted.
+   */
+  const onCloseRef = useRef(props.onClose);
+  onCloseRef.current = props.onClose;
+
   useEffect(() => {
     firstField.current?.focus();
     firstField.current?.select();
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        props.onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !panel.current) return;
@@ -78,7 +92,7 @@ export default function ShareDialog(props: Props) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [props]);
+  }, []);
 
   const load = useCallback(async () => {
     const { data: rows, error: rowsError } = await supabase

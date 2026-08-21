@@ -346,6 +346,17 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         });
         announceAi("done", "refine", props.displayName);
       } catch (error) {
+        /**
+         * A superseded run must not touch the panel.
+         *
+         * Starting a new run aborts the previous one, and the previous one then
+         * lands here a moment later with an AbortError. Without this check it
+         * reports its own ending over the run that replaced it: the panel drops
+         * from "Reading your sketch…" back to nothing, or shows an error for
+         * work nobody is waiting on, while the run that is still going has no
+         * way to say so.
+         */
+        if (aiAbort.current !== controller) return;
         if (error instanceof DOMException && error.name === "AbortError") {
           setAiRun(null);
         } else {
@@ -440,6 +451,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         });
         announceAi("done", "prompt", props.displayName);
       } catch (error) {
+        // See the note on the first of these: a superseded run reports its own
+        // abort over the run that replaced it.
+        if (aiAbort.current !== controller) return;
         if (error instanceof DOMException && error.name === "AbortError") {
           setAiRun(null);
         } else {
@@ -508,11 +522,39 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         // should not be reported as a failure because the reading step was rate
         // limited or refused.
         const words = await readPhotoText(props.boardId, image, file.type, controller.signal);
+
+        /**
+         * Cancel has to be checked here, not left to the signal.
+         *
+         * readPhotoText swallows its own failures and returns [] so that a
+         * refused or rate-limited reading step does not fail a trace that
+         * worked. An abort arrives as one of those failures, so the signal that
+         * was supposed to stop this run is caught, discarded, and the run
+         * carries on to commit the trace to a board the user has already told
+         * it to leave alone.
+         */
+        if (aiAbort.current !== controller) return;
+
         const labels = words.length
           ? textToElements(words, origin, payload.traced_width, payload.traced_height)
           : [];
 
-        commit([...all, ...elements, ...labels], true);
+        /**
+         * Re-read, do not reuse `all`.
+         *
+         * `all` was taken before the reading step, and that step is a network
+         * round trip to a model: seconds, not milliseconds. Anything drawn in
+         * that window, by this user or by a peer arriving through
+         * onRemoteScene, is on the canvas but not in `all`, and committing the
+         * older list as the complete scene is how it gets deleted. The trace
+         * itself is already covered, since `all` is read after that fetch
+         * returns; the reading step opened a second window behind it.
+         *
+         * Only the base changes. `origin` stays as computed, because the placed
+         * shapes have already been laid out against it.
+         */
+        const current = api.getSceneElements() as unknown as SyncElement[];
+        commit([...current, ...elements, ...labels], true);
         api.scrollToContent([...elements, ...labels] as never, { fitToContent: true });
 
         setAiRun({
@@ -529,6 +571,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           },
         });
       } catch (error) {
+        // See the note on the first of these: a superseded run reports its own
+        // abort over the run that replaced it.
+        if (aiAbort.current !== controller) return;
         if (error instanceof DOMException && error.name === "AbortError") {
           setAiRun(null);
         } else {
@@ -654,6 +699,11 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             onDismiss={() => setAiRun(null)}
             onCancel={() => {
               aiAbort.current?.abort();
+              // Cleared, not just aborted. The in-flight run compares itself
+              // against this ref to decide whether it is still the current one,
+              // and leaving it pointing at the controller that was just
+              // cancelled tells that run it is still wanted.
+              aiAbort.current = null;
               setAiRun(null);
             }}
             onBeautify={runBeautifyAi}
