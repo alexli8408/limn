@@ -41,6 +41,15 @@ element list, and returns structure rather than scene JSON. A deterministic
 compiler places it. Your arrangement survives, and the arrows are properly bound
 rather than merely adjacent.
 
+It works on drawings, not only diagrams. A picture has no node-and-edge form to
+be rewritten into, so the model instead groups the strokes you already drew and
+says what each group is: these five are the house, square it up and line up its
+baselines. Every coordinate is derived from the elements already on the canvas,
+so nothing is replaced and nothing is lost.
+
+![A wobbly hand-drawn house and sun, beside the same drawing with straight walls,
+a true circle and a level ground line](docs/beautify-before-after.png)
+
 ---
 
 ## Measured results
