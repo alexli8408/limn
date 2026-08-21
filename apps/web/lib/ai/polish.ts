@@ -106,6 +106,12 @@ const STRAIGHT_RESIDUAL = 0.12;
  */
 const REGULARIZE_CONFIDENCE = 0.7;
 
+/**
+ * Below this ratio of short side to long side an element is a line, not a box,
+ * and its short axis is thickness rather than a dimension anyone chose.
+ */
+const LINE_ASPECT = 0.15;
+
 /** Samples around an idealised ellipse. Enough that it reads as smooth at any zoom. */
 const ELLIPSE_SAMPLES = 64;
 
@@ -513,18 +519,49 @@ function equalizeSize(members: readonly Member[], ops: Ops): void {
   const boxes = placed(members).filter(({ member }) => isResizable(member.draft));
   if (boxes.length < 2) return;
 
-  // Median rather than mean, so one oversized member does not inflate the whole
-  // group. The align engine sizes its tolerance off a median for the same reason.
-  const width = median(boxes.map((b) => b.box.width));
-  const height = median(boxes.map((b) => b.box.height));
-  // A row of vertical strokes has a median width of 0, and there is nothing on
-  // that axis to agree on. Requiring both axes meant the whole op quietly did
-  // nothing for them, so each axis is decided on its own and a flat one keeps
-  // whatever each member already had.
-  if (width < 1 && height < 1) return;
+  /**
+   * Lines are sized by length, boxes by width and height, and mixing the two
+   * rules is what broke this.
+   *
+   * The earlier version tested whether the group's MEDIAN extent on an axis was
+   * near zero, and wrote that median onto every member. In a group of sun rays,
+   * one vertical (3 by 37), one horizontal (35 by 4), one diagonal, both medians
+   * are healthy, so the vertical ray was stretched from 3px wide to the group
+   * median and came back as a 45 degree diagonal. The op had changed the
+   * direction of a stroke, which is not a size change by any reading.
+   *
+   * A line has no meaningful width to agree on, only a length. So the two kinds
+   * are separated and each agrees with its own: lines scale uniformly onto a
+   * median length, which leaves vertical vertical, and boxes keep the per-axis
+   * median they always had.
+   */
+  const oneDimensional = ({ box }: Placed): boolean =>
+    Math.min(box.width, box.height) < LINE_ASPECT * Math.max(box.width, box.height);
 
-  for (const { member, box } of boxes) {
-    ops.resize(member.draft, width < 1 ? box.width : width, height < 1 ? box.height : height);
+  const lines = boxes.filter(oneDimensional);
+  const solids = boxes.filter((b) => !oneDimensional(b));
+
+  if (lines.length >= 2) {
+    const target = median(lines.map(({ box }) => Math.hypot(box.width, box.height)));
+    if (target >= 1) {
+      for (const { member, box } of lines) {
+        const length = Math.hypot(box.width, box.height);
+        if (length < 1) continue;
+        const scale = target / length;
+        ops.resize(member.draft, box.width * scale, box.height * scale);
+      }
+    }
+  }
+
+  if (solids.length >= 2) {
+    // Median rather than mean, so one oversized member does not inflate the
+    // whole group. The align engine sizes its tolerance off a median too.
+    const width = median(solids.map((b) => b.box.width));
+    const height = median(solids.map((b) => b.box.height));
+    if (width < 1 && height < 1) return;
+    for (const { member, box } of solids) {
+      ops.resize(member.draft, width < 1 ? box.width : width, height < 1 ? box.height : height);
+    }
   }
 }
 

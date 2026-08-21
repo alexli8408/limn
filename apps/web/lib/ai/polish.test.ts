@@ -320,6 +320,60 @@ test("regularize redraws a hand-drawn circle as a circle, without changing its t
   assert.deepEqual((sun.points as [number, number][])[0], [0, 0]);
 });
 
+test("equalize-size makes lines the same length without turning them", () => {
+  /**
+   * Sun rays: one straight up, one straight out, one diagonal. They should end
+   * up the same LENGTH and still point where they pointed.
+   *
+   * The first version of this op wrote the group's median width and median
+   * height onto every member. Both medians are healthy here, so the vertical ray
+   * was stretched from 3px wide to the median and came back a 45 degree
+   * diagonal. Changing the direction of a stroke is not a size change.
+   */
+  const line = (id: string, x: number, y: number, dx: number, dy: number) =>
+    sketch({
+      id,
+      type: "freedraw",
+      x,
+      y,
+      width: Math.abs(dx),
+      height: Math.abs(dy),
+      points: [
+        [0, 0],
+        [dx, dy],
+      ],
+    });
+
+  const existing = [
+    line("up", 700, 60, 3, 40), // essentially vertical
+    line("out", 790, 180, 36, 3), // essentially horizontal
+    line("diag", 760, 100, 26, 26), // genuinely diagonal
+  ];
+
+  const { elements } = polishSketch(existing, [group(["up", "out", "diag"], ["equalize-size"])]);
+  const by = new Map(elements.map((el) => [String(el.id), el]));
+
+  const up = by.get("up");
+  const out = by.get("out");
+  assert.ok(up && out);
+
+  // Still pointing the way they were drawn.
+  assert.ok(
+    Number(up.height) > Number(up.width) * 3,
+    `the vertical ray came back ${Number(up.width)} by ${Number(up.height)}`,
+  );
+  assert.ok(
+    Number(out.width) > Number(out.height) * 3,
+    `the horizontal ray came back ${Number(out.width)} by ${Number(out.height)}`,
+  );
+
+  // And agreeing on length, which is the only size a line has.
+  const length = (el: SyncElement) => Math.hypot(Number(el.width), Number(el.height));
+  const lengths = ["up", "out", "diag"].map((id) => length(by.get(id) as SyncElement));
+  const spread = Math.max(...lengths) - Math.min(...lengths);
+  assert.ok(spread <= 2, `lengths still disagree: ${lengths.map((n) => n.toFixed(0)).join(", ")}`);
+});
+
 test("equalize-size gives every member the middle size, not the biggest", () => {
   const scene = [
     sketch({ id: "a", x: 0, y: 0, width: 100, height: 60 }),
