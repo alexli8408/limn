@@ -61,8 +61,6 @@ const UI_OPTIONS = { canvasActions: { toggleTheme: true, loadScene: false } } as
 
 export default function BoardCanvas(props: BoardCanvasProps) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
-  // TEMPORARY verification scaffold. Not committed.
-  if (typeof window !== "undefined" && api) (window as never as Record<string, unknown>).__limn = api;
   const [beautifyOn, setBeautifyOn] = useState(true);
   const [aiRun, setAiRun] = useState<AiRun | null>(null);
   const [sharing, setSharing] = useState(false);
