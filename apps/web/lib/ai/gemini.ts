@@ -354,10 +354,19 @@ async function generate(
     if (status === 429) {
       const quota = quotaInfo(error);
       if (quota?.daily) {
+        /**
+         * Two model names used to be suggested here as a way to get a fresh
+         * allowance. Both were checked against the real API and both reject
+         * this request with a bare 400 "invalid argument", with or without the
+         * groups field, so the schema is simply not supported on either. The
+         * advice traded a clear quota message for an opaque rejection, which is
+         * a worse place to be stuck. Anything suggested here has to be tested
+         * against geminiDiagramSchema first.
+         */
         throw new Error(
           `Out of Gemini requests for today. The free tier allows ${quota.limit} per day for ` +
-            `"${args.model}", and each model has its own allowance, so switching GEMINI_MODEL ` +
-            `(gemini-3.1-flash-lite, gemini-3.5-flash) gives you a fresh one. Enabling billing removes the cap.`,
+            `"${args.model}". The allowance resets at midnight Pacific, and enabling billing ` +
+            `removes the cap.`,
         );
       }
       throw new Error(
