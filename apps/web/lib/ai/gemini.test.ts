@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test, vi } from "vitest";
-import { parseDiagram } from "./schema";
+import { geminiDiagramSchema, parseDiagram, polishOps } from "./schema";
 
 /**
  * The failure paths, against a stubbed generateContent.
@@ -161,4 +161,122 @@ test("a fallback to flash keeps counting the attempts it already spent", async (
   assert.equal(meta.fellBack, true);
   assert.equal(meta.attempts, 4, "the counter restarted with the fallback");
   assert.equal(meta.model, "test-flash", "meta.model must name the model that answered");
+});
+
+/**
+ * A drawing has no structure to restate, so the answer is groups over the ids
+ * that are already on the board. This used to be a refusal, which meant the
+ * feature only worked on people who had drawn a flowchart.
+ */
+const drawing = {
+  kind: "drawing",
+  layout: "preserve",
+  rationale: "a house and a sun, squared up",
+  notes: [],
+  nodes: [],
+  edges: [],
+  groups: [
+    { ids: ["e1", "e2", "e3"], label: "the house", ops: ["align-bottom", "match-style"] },
+    { ids: ["e4"], label: "the sun", ops: ["regularize"] },
+  ],
+};
+
+const sketch = () => ({
+  elements: [
+    { id: "e1", type: "rectangle", x: 0, y: 0, width: 80, height: 60 },
+    { id: "e2", type: "line", x: 0, y: 60, width: 80, height: 40 },
+    { id: "e3", type: "rectangle", x: 20, y: 20, width: 20, height: 20 },
+    { id: "e4", type: "ellipse", x: 200, y: 0, width: 40, height: 42 },
+  ],
+  // One pixel. The model is stubbed, so only the shape of the call matters.
+  imageBase64:
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+});
+
+test("a drawing comes back with groups instead of nothing to apply", async () => {
+  const { refineSketch } = await load();
+  generateContent.mockResolvedValue({
+    text: JSON.stringify(drawing),
+    candidates: [{ finishReason: "STOP" }],
+    usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20 },
+  });
+
+  const { diagram: result } = await refineSketch(sketch());
+
+  assert.equal(result.kind, "drawing");
+  assert.equal(result.groups.length, 2, "the polish payload was dropped on the way through");
+  assert.deepEqual(
+    result.groups.map((group) => group.ids),
+    [["e1", "e2", "e3"], ["e4"]],
+  );
+  // The stick-figure guard still holds: a picture never becomes structure.
+  assert.deepEqual(result.nodes, []);
+  assert.deepEqual(result.edges, []);
+});
+
+test("the schema and the prompt agree that a drawing gets grouped", async () => {
+  const { refineSketch } = await load();
+  generateContent.mockResolvedValue({
+    text: JSON.stringify(drawing),
+    candidates: [{ finishReason: "STOP" }],
+    usageMetadata: {},
+  });
+
+  await refineSketch(sketch());
+  const [request] = generateContent.mock.calls[0] ?? [];
+
+  // The response schema is read at decode time and outranks the system prompt,
+  // so the two drifting apart is not a style problem, it decides the answer.
+  assert.ok(request.config.responseSchema.properties.groups, "no groups field to decode into");
+  assert.ok(
+    request.config.responseSchema.required.includes("groups"),
+    "groups is optional, so a drawing can come back polishable-by-nothing",
+  );
+  assert.match(request.config.systemInstruction, /fill in groups/);
+  assert.doesNotMatch(
+    request.config.systemInstruction,
+    /better\s+to decline/,
+    "the prompt still tells the model a drawing is a dead end",
+  );
+});
+
+test("the ops offered to the model are exactly the ops in the contract", () => {
+  assert.deepEqual(
+    [...geminiDiagramSchema.properties.groups.items.properties.ops.items.enum],
+    [...polishOps],
+    "an op the model can return but the compiler has never heard of",
+  );
+});
+
+test("one element cannot be claimed by two groups", () => {
+  const { diagram: result, dropped } = parseDiagram({
+    ...drawing,
+    groups: [
+      { ids: ["e1", "e2"], label: "the house", ops: ["align-bottom"] },
+      // Both groups would compute a position for e2 and the later one would win,
+      // so the same drawing tidies differently depending on group order.
+      { ids: ["e2", "e4"], label: "the sun", ops: ["distribute-x"] },
+      { ids: ["e1"], label: "the roof", ops: [] },
+    ],
+  });
+
+  assert.deepEqual(
+    result.groups.map((g) => g.ids),
+    [
+      ["e1", "e2"],
+      ["e4"],
+    ],
+    "a duplicated id survived, or a group left empty was kept",
+  );
+  assert.ok(dropped.reason.some((r) => r.includes("more than one group")));
+});
+
+test("only a drawing keeps its groups", () => {
+  // "empty" means there were no elements to name, so any group names nothing.
+  assert.deepEqual(parseDiagram({ ...drawing, kind: "empty" }).diagram.groups, []);
+  // A rebuild tombstones the elements a group would point at.
+  assert.deepEqual(
+    parseDiagram({ ...diagram, groups: [{ ids: ["e1"], label: "stray", ops: [] }] }).diagram.groups,
+    [],
+  );
 });

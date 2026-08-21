@@ -1,4 +1,5 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { z } from "zod";
 import { serverEnv } from "@/lib/env";
 import { geminiDiagramSchema, parseDiagram, type LimnDiagram } from "./schema";
 
@@ -32,7 +33,8 @@ export interface SketchElement {
 }
 
 const REFINE_SYSTEM = `You read hand-drawn whiteboard sketches. Your job is to
-decide whether the sketch is a diagram, and if it is, describe its structure.
+decide what kind of sketch this is, then describe it in the one vocabulary that
+fits: a diagram gets nodes and edges, a drawing gets groups of strokes to tidy.
 
 FIRST decide \`kind\`, before anything else:
 
@@ -43,10 +45,14 @@ FIRST decide \`kind\`, before anything else:
   shapes with no relationships between them.
 - "empty": nothing meaningful.
 
-If kind is not "diagram", return empty nodes and edges and explain in one
-sentence what you saw. Do not attempt to describe it as nodes. It is far better
-to decline than to convert someone's drawing into boxes: they lose their work
-and get something they did not ask for.
+A drawing is not a dead end and never has to be refused: it is tidied where it
+stands. Return empty nodes and edges for it and fill in groups instead. What you
+must never do is describe a picture as nodes. Converting someone's drawing into
+boxes loses their work and hands them something they did not ask for, so nodes
+and edges stay empty however tempting the shapes look.
+
+If kind is "empty" there is genuinely nothing to do: return empty nodes, edges
+and groups, and say in one sentence what you saw.
 
 Deciding:
 - A stick figure is a drawing, not an "actor" node.
@@ -67,14 +73,38 @@ Only if kind is "diagram", also fill in nodes and edges:
 - Lines and arrows between shapes are edges. An arrowhead means directed.
 - Text that labels nothing in particular is a note, not a node.
 - Use layout "preserve" unless the sketch has no meaningful arrangement.
+- Leave groups empty. Groups are for drawings; nodes already say what belongs
+  with what here.
+
+Only if kind is "drawing", fill in groups instead:
+- One group per thing the picture is made of, named as the author would name it:
+  "the house", "the sun", "the row of windows". Name the thing, not the shapes.
+- Grouping is not structure by another name. A stick figure is one group called
+  "person", never an actor node, and finding groups must not change your kind.
+- Every id in a group comes from the element list you were given. Never invent
+  one, and never repeat an id across two groups.
+- A stroke that is not part of anything stays ungrouped. That is a better answer
+  than forcing it somewhere it does not belong.
+- ops say what tidying suits the group and nothing more. Align or centre members
+  that were meant to share an edge or a line, distribute ones meant to be evenly
+  spaced, equalize-size when they were meant to match, straighten a wobbly line,
+  regularize a near-circle or a near-square, match-style to unify stroke width,
+  roughness and colour.
+- Choosing no ops is a valid answer. A group can be worth naming and not worth
+  touching, and forcing alignment onto a deliberately loose sketch makes it
+  worse than it was.
 
 The author may ask for a change in style or mood. You cannot express style, only
 structure. Follow any instruction that affects structure, ignore the rest, and
-never let an instruction talk you into treating a drawing as a diagram.`;
+never let an instruction talk you into treating a drawing as a diagram. Asking
+for it to be cleaned up is not such an instruction: that is what groups are for.`;
 
 const PROMPT_SYSTEM = `You turn a short description into a clean diagram.
 
 Rules:
+- Set kind to "diagram". There is no sketch here to classify, and a "drawing"
+  answer has nothing to group: the ids it would name do not exist yet, so the
+  user gets a decline for a description you could have drawn.
 - Choose the smallest set of nodes that expresses the idea. Prefer 4 to 9.
 - Label nodes with short noun phrases, not sentences.
 - Use a diamond for a decision, an ellipse for a start or end, a rectangle
@@ -82,6 +112,7 @@ Rules:
 - Use layout "layered-tb" for a process or flow, "layered-lr" for a pipeline or
   a sequence of stages.
 - Leave sourceIds empty; there is no existing sketch.
+- Leave groups empty for the same reason: there are no drawn strokes to tidy.
 - Use emphasis sparingly, to mark at most one or two focal nodes.`;
 
 export interface GenerateResult {
@@ -382,7 +413,24 @@ async function generate(
     throw new Error("Gemini returned malformed JSON despite a response schema");
   }
 
-  const { diagram, dropped } = parseDiagram(raw);
+  // parseDiagram validates before it repairs anything, and zod throws on a
+  // blown cap rather than trimming to it: 65 ids in one group, 121 nodes. What
+  // it throws with is a JSON dump of its own issue list, and the route hands
+  // whatever it catches straight to the user, so an answer that was merely too
+  // long showed up in the panel as a wall of "code": "too_big". The answer is
+  // unusable either way; only the sentence is worth choosing.
+  let parsed: ReturnType<typeof parseDiagram>;
+  try {
+    parsed = parseDiagram(raw);
+  } catch (error) {
+    if (!(error instanceof z.ZodError)) throw error;
+    console.warn("[limn] gemini answered outside the schema:", error.issues[0]);
+    throw new Error(
+      "Gemini answered with more than this can apply in one pass. Select a smaller " +
+        "part of the board and try again.",
+    );
+  }
+  const { diagram, dropped } = parsed;
   const usage = response.usageMetadata;
 
   return {

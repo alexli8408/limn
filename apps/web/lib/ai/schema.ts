@@ -57,6 +57,51 @@ export const diagramEdgeSchema = z.object({
   sourceIds: z.array(z.string().max(128)).max(64).default([]),
 });
 
+/**
+ * How a drawing gets tidied instead of rebuilt.
+ *
+ * A rebuild is only possible when the sketch has a structure to restate. A house
+ * does not, and with nodes and edges as the only vocabulary the one honest
+ * answer left was to decline, which made the whole feature conditional on having
+ * drawn a flowchart. So the model names the strokes that belong together and
+ * says what tidying suits each set, and the compiler derives every coordinate
+ * from the elements already on the canvas. Same division of labour as the
+ * diagram path: the model reads intent, the code does geometry. It is not asked
+ * for a coordinate here either.
+ */
+export const polishOps = [
+  "align-left",
+  "align-right",
+  "align-top",
+  "align-bottom",
+  "align-center-x",
+  "align-center-y",
+  "distribute-x",
+  "distribute-y",
+  /** One bounding size for every member. */
+  "equalize-size",
+  /** A wobbly freedraw or line becomes a straight segment. */
+  "straighten",
+  /** A near-circle becomes a circle, a near-square squares up. */
+  "regularize",
+  /** Unify strokeWidth, roughness and strokeColor across the members. */
+  "match-style",
+] as const;
+
+export const polishGroupSchema = z.object({
+  /**
+   * Ids of elements that are already on the board, unlike diagramNodeSchema.id
+   * which the model invents. An invented id names nothing the compiler can move,
+   * and pointing at existing elements is the whole reason this payload needs no
+   * coordinates in it.
+   */
+  ids: z.array(z.string().max(128)).max(64).default([]),
+  /** What the group is, in the author's words. It is shown to them, so keep it theirs. */
+  label: z.string().max(80).default(""),
+  /** Empty is a real answer: a group can be worth naming and not worth touching. */
+  ops: z.array(z.enum(polishOps)).max(6).default([]),
+});
+
 export const diagramSchema = z.object({
   // Defaults to "drawing" so a missing kind fails closed. Defaulting to
   // "diagram" meant a truncated or malformed response was converted anyway, and
@@ -66,6 +111,14 @@ export const diagramSchema = z.object({
   layout: z.enum(layouts).default("preserve"),
   nodes: z.array(diagramNodeSchema).max(120).default([]),
   edges: z.array(diagramEdgeSchema).max(240).default([]),
+  /**
+   * Polish groups over the ids that are already on the canvas.
+   *
+   * The other half of the answer, and the only half a drawing has. Filled only
+   * when kind is "drawing"; parseDiagram clears it otherwise, so a rebuild
+   * cannot ask the polish compiler to move elements it is about to replace.
+   */
+  groups: z.array(polishGroupSchema).max(40).default([]),
   /** Free-standing text the model judged to be annotation rather than a node. */
   notes: z
     .array(
@@ -80,6 +133,8 @@ export const diagramSchema = z.object({
   rationale: z.string().max(400).default(""),
 });
 
+export type PolishOp = (typeof polishOps)[number];
+export type PolishGroup = z.infer<typeof polishGroupSchema>;
 export type DiagramNode = z.infer<typeof diagramNodeSchema>;
 export type DiagramEdge = z.infer<typeof diagramEdgeSchema>;
 export type LimnDiagram = z.infer<typeof diagramSchema>;
@@ -100,7 +155,7 @@ export const geminiDiagramSchema = {
       type: "string",
       enum: [...sketchKinds],
       description:
-        "'diagram' when the sketch is boxes/shapes connected by lines or arrows. 'drawing' when it is a picture of something (a person, an object, a scene, a doodle, handwriting) rather than a node-and-edge structure. 'empty' when there is nothing meaningful. Choose 'drawing' whenever you are unsure: returning nodes for a picture destroys the author's work.",
+        "'diagram' when the sketch is boxes/shapes connected by lines or arrows. 'drawing' when it is a picture of something (a person, an object, a scene, a doodle, handwriting) rather than a node-and-edge structure. 'empty' when there is nothing meaningful. Choose 'drawing' whenever you are unsure: returning nodes for a picture destroys the author's work, and a drawing is not refused, it is tidied in place through groups.",
     },
     title: {
       type: "string",
@@ -168,6 +223,48 @@ export const geminiDiagramSchema = {
         propertyOrdering: ["from", "to", "label", "style", "directed", "sourceIds"],
       },
     },
+    groups: {
+      type: "array",
+      // Caps the decoder enforces, so an over-long answer never reaches zod,
+      // which throws on one rather than trimming it. Safe here and deliberately
+      // absent on nodes: a group the model had to cut short leaves those strokes
+      // where the author drew them, while a node list cut short still gets
+      // applied, and applying it tombstones every element the missing nodes came
+      // from. For structure, failing is the better half of the trade.
+      maxItems: "40",
+      // The only instructions the model reliably reads for this payload. Kept in
+      // step with REFINE_SYSTEM on purpose: the response schema is read at decode
+      // time and outranks the system prompt, so a sentence here that contradicts
+      // the prompt wins, which is where the stick-figure regression came from.
+      description:
+        "Fill this ONLY when kind is 'drawing'. Leave it empty for a diagram: a diagram is expressed with nodes and edges instead. A drawing is never rebuilt, it is tidied where it stands, and these groups are how that happens. Split the strokes into the things the picture is made of and name each one the way the author would: 'the house', 'the sun', 'the row of windows'. Group by what the thing IS to them, not by shape type and not by nearness alone: two circles that are the wheels of one car belong together, two circles that merely sit side by side often do not. Use only ids from the element list you were given and never invent one. Every id belongs to at most one group, and a stroke that is not part of anything is better left ungrouped than forced into a group it does not belong to.",
+      items: {
+        type: "object",
+        properties: {
+          ids: {
+            type: "array",
+            maxItems: "64",
+            items: { type: "string" },
+            description:
+              "Ids of the existing elements in this group, taken from the element list. At most 64.",
+          },
+          label: {
+            type: "string",
+            description:
+              "What this group is, in the author's vocabulary: 'the house', 'the left column'. Name the thing, not the shapes: 'roof', not 'two lines'.",
+          },
+          ops: {
+            type: "array",
+            maxItems: "6",
+            items: { type: "string", enum: [...polishOps] },
+            description:
+              "The tidying that suits this group, at most 6. align-left/right/top/bottom snap its members to a shared edge, align-center-x/align-center-y to a shared centre line. distribute-x/distribute-y even out the gaps along one axis. equalize-size gives every member one bounding size. straighten turns a wobbly line or freehand stroke into a straight segment. regularize rounds a near-circle to a circle and squares up a near-square. match-style unifies stroke width, roughness and colour. Choose only what genuinely suits the group; an empty list is a valid answer, and forcing alignment on a deliberately loose sketch makes it worse.",
+          },
+        },
+        required: ["ids", "label", "ops"],
+        propertyOrdering: ["ids", "label", "ops"],
+      },
+    },
     notes: {
       type: "array",
       items: {
@@ -183,12 +280,49 @@ export const geminiDiagramSchema = {
     rationale: {
       type: "string",
       description:
-        "One sentence on what you changed and why, or if you declined, what you saw instead.",
+        "One sentence on what you changed and why. For a drawing, say what you saw and what you tidied, not that you declined.",
     },
   },
-  required: ["kind", "layout", "nodes", "edges", "rationale"],
-  propertyOrdering: ["kind", "title", "layout", "nodes", "edges", "notes", "rationale"],
+  // groups is required for the same reason nodes and edges are: an omitted field
+  // decodes as absent, and a drawing that came back without groups would be
+  // polished into nothing while reporting success. An empty array is the way to
+  // say there is nothing here.
+  required: ["kind", "layout", "nodes", "edges", "groups", "rationale"],
+  propertyOrdering: ["kind", "title", "layout", "nodes", "edges", "groups", "notes", "rationale"],
 } as const;
+
+/**
+ * One id, one group.
+ *
+ * Overlapping groups are a model error with a real consequence: both groups
+ * compute a position for the shared element and whichever runs last wins, so the
+ * same drawing tidies differently depending on the order the model happened to
+ * list them in. First claim keeps the id. A group of one is still kept, since
+ * straighten and regularize act on a single stroke; only a group with no ids
+ * left is certainly useless.
+ */
+function claimGroups(groups: PolishGroup[], reason: string[]): PolishGroup[] {
+  const claimed = new Set<string>();
+  const kept: PolishGroup[] = [];
+
+  for (const group of groups) {
+    const ids = group.ids.filter((id) => {
+      if (claimed.has(id)) {
+        reason.push(`id "${id}" claimed by more than one group`);
+        return false;
+      }
+      claimed.add(id);
+      return true;
+    });
+    if (ids.length === 0) {
+      reason.push(`group "${group.label}" has no ids left`);
+      continue;
+    }
+    kept.push({ ...group, ids });
+  }
+
+  return kept;
+}
 
 /**
  * Validates, then repairs what is safe to repair.
@@ -205,14 +339,21 @@ export function parseDiagram(raw: unknown): {
   const known = new Set(diagram.nodes.map((n) => n.id));
   const reason: string[] = [];
 
-  // A declined sketch must carry nothing through. A model that says "drawing"
-  // and still emits nodes would otherwise have those applied anyway.
+  // A sketch that is not a diagram must carry no structure through. A model that
+  // says "drawing" and still emits nodes would otherwise have those applied
+  // anyway, and applying them tombstones the picture they were read from.
+  //
+  // Groups are the exception, because they are what a drawing gets instead: they
+  // move the elements the author already drew rather than replacing them. Only a
+  // drawing has any, though. "empty" means there was nothing to name, so a group
+  // returned alongside it points at ids that are not there.
   if (diagram.kind !== "diagram") {
+    const groups = diagram.kind === "drawing" ? claimGroups(diagram.groups, reason) : [];
     return {
-      diagram: { ...diagram, nodes: [], edges: [], notes: [] },
+      diagram: { ...diagram, nodes: [], edges: [], notes: [], groups },
       dropped: {
         edges: diagram.edges.length,
-        reason: [`sketch classified as "${diagram.kind}"`],
+        reason: [`sketch classified as "${diagram.kind}"`, ...reason],
       },
     };
   }
@@ -263,7 +404,10 @@ export function parseDiagram(raw: unknown): {
   }));
 
   return {
-    diagram: { ...diagram, edges: unique },
+    // A rebuild replaces the sketch outright, so any group the model volunteered
+    // here names elements that are about to be tombstoned. Polishing them would
+    // be work against a scene that no longer exists.
+    diagram: { ...diagram, edges: unique, groups: [] },
     dropped: { edges: diagram.edges.length - unique.length, reason },
   };
 }
