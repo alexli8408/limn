@@ -16,6 +16,7 @@ import { useCollab } from "@/lib/collab/useCollab";
 import { useBoardThumbnail } from "@/lib/board/useBoardThumbnail";
 import { useStrokeBeautify } from "@/lib/beautify/useStrokeBeautify";
 import { compileDiagram, inkOf, tombstone } from "@/lib/ai/compile";
+import { polishSketch } from "@/lib/ai/polish";
 import { autoTitleBoard } from "@/app/actions";
 import type { LimnDiagram } from "@/lib/ai/schema";
 import RemoteCursors from "./RemoteCursors";
@@ -255,7 +256,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   /* ---------------------------------------------------------------- */
 
   const runBeautifyAi = useCallback(
-    async (instruction?: string, quality?: "fast" | "high") => {
+    async () => {
       if (!api || readOnly) return;
 
       const all = api.getSceneElements() as unknown as SyncElement[];
@@ -297,9 +298,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             boardId: props.boardId,
             elements: target.map(toSketchElement),
             image,
-            instruction,
             mode: "refine",
-            quality: quality ?? "fast",
           }),
           signal: controller.signal,
         });
@@ -312,19 +311,58 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           throw new Error("error" in payload ? payload.error : "generation failed");
         }
 
-        // A sketch that is not a diagram is left completely alone. Converting a
-        // drawing into boxes loses the author's work and gives them something
-        // they did not ask for, which is worse than doing nothing.
-        if (payload.diagram.kind !== "diagram") {
+        /**
+         * A drawing is tidied in place rather than refused.
+         *
+         * This used to decline outright, because the only thing the compiler
+         * could build was a node-and-edge diagram and forcing a picture through
+         * that vocabulary destroyed it. The model now also returns groups over
+         * the ids already on the canvas, so a drawing can be squared up and
+         * aligned without any of it being replaced.
+         *
+         * "empty" still declines. There is nothing on the board to tidy, and
+         * inventing something is not what the button says it does.
+         */
+        if (payload.diagram.kind === "empty") {
           setAiRun({
             state: "declined",
             message:
+              payload.diagram.rationale || "There is nothing on the board to tidy yet.",
+            hint: "Draw something first, then try again.",
+          });
+          announceAi("done", "refine", props.displayName);
+          return;
+        }
+
+        if (payload.diagram.kind === "drawing") {
+          // Re-read for the same reason the diagram path does: the request took
+          // seconds and the canvas may have moved on.
+          const live = api.getSceneElements() as unknown as SyncElement[];
+          const polished = polishSketch(live, payload.diagram.groups);
+
+          if (polished.changed.length === 0) {
+            setAiRun({
+              state: "done",
+              message: payload.diagram.rationale || "That already looks tidy, so nothing moved.",
+            });
+            announceAi("done", "refine", props.displayName);
+            return;
+          }
+
+          commit(polished.elements, true);
+          if (payload.diagram.title) applyAiTitle(payload.diagram.title);
+          setAiRun({
+            state: "done",
+            message:
               payload.diagram.rationale ||
-              "That looks like a drawing rather than a diagram, so nothing was changed.",
-            hint:
-              payload.diagram.kind === "empty"
-                ? "Draw some shapes and connect them with arrows, then try again."
-                : "Clean up only redraws diagrams. For a drawing, the Snap toggle in the header tidies strokes as you draw.",
+              `Tidied ${polished.changed.length} shapes across ${polished.groups} groups.`,
+            stats: {
+              nodes: polished.groups,
+              edges: 0,
+              aligned: polished.changed.length,
+              latencyMs: Number(payload.meta?.latencyMs ?? 0),
+              model: String(payload.meta?.model ?? "gemini"),
+            },
           });
           announceAi("done", "refine", props.displayName);
           return;
@@ -392,7 +430,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   );
 
   const runPromptAi = useCallback(
-    async (prompt: string, quality?: "fast" | "high") => {
+    async (prompt: string) => {
       if (!api || readOnly) return;
       aiAbort.current?.abort();
       const controller = new AbortController();
@@ -407,7 +445,6 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           body: JSON.stringify({
             boardId: props.boardId,
             prompt,
-            quality: quality ?? "fast",
           }),
           signal: controller.signal,
         });
@@ -487,6 +524,89 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     },
     [api, readOnly, announceAi, props.boardId, props.displayName, commit, applyAiTitle],
   );
+
+  /**
+   * Corrects the writing on the board.
+   *
+   * Sends only the text, never the geometry, because nothing about where a
+   * label sits helps decide whether it is spelled correctly, and the whole
+   * scene would be a much larger request for no gain.
+   */
+  const runRewrite = useCallback(async () => {
+    if (!api || readOnly) return;
+
+    const all = api.getSceneElements() as unknown as SyncElement[];
+    const items = all
+      .filter((el) => !el.isDeleted && typeof el.text === "string" && String(el.text).trim())
+      .map((el) => ({ id: el.id, text: String(el.text) }));
+
+    if (items.length === 0) {
+      setAiRun({ state: "error", message: "There is no writing on this board yet." });
+      return;
+    }
+
+    aiAbort.current?.abort();
+    const controller = new AbortController();
+    aiAbort.current = controller;
+    setAiRun({ state: "running", message: "Reading the writing…", startedAt: Date.now() });
+    announceAi("start", "refine", props.displayName);
+
+    try {
+      const response = await fetch("/api/ai/rewrite", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ boardId: props.boardId, items }),
+        signal: controller.signal,
+      });
+      const payload = (await response.json()) as
+        | { edits: { id: string; text: string }[]; meta: Record<string, unknown> }
+        | { error: string };
+      if (!response.ok || "error" in payload) {
+        throw new Error("error" in payload ? payload.error : "could not read the writing");
+      }
+      if (aiAbort.current !== controller) return;
+
+      const edits = new Map(payload.edits.map((edit) => [edit.id, edit.text]));
+      if (edits.size === 0) {
+        setAiRun({ state: "done", message: "Nothing to correct, the writing is already clean." });
+        announceAi("done", "refine", props.displayName);
+        return;
+      }
+
+      // Re-read, and bump only what changed: republishing every label on the
+      // board would make one typo look like an edit to all of them.
+      const live = api.getSceneElements() as unknown as SyncElement[];
+      const next = live.map((el) => {
+        const text = edits.get(el.id);
+        if (text === undefined || text === el.text) return el;
+        return {
+          ...el,
+          text,
+          originalText: text,
+          version: Number(el.version ?? 0) + 1,
+          versionNonce: Math.floor(Math.random() * 2 ** 31),
+          updated: Date.now(),
+        } as SyncElement;
+      });
+
+      commit(next, true);
+      setAiRun({
+        state: "done",
+        message: `Corrected ${edits.size} ${edits.size === 1 ? "label" : "labels"}.`,
+      });
+      announceAi("done", "refine", props.displayName);
+    } catch (error) {
+      if (aiAbort.current !== controller) return;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setAiRun(null);
+      } else {
+        setAiRun({
+          state: "error",
+          message: error instanceof Error ? error.message : "could not read the writing",
+        });
+      }
+    }
+  }, [api, readOnly, props.boardId, props.displayName, commit, announceAi]);
 
   const runVectorize = useCallback(
     async (file: File) => {
@@ -729,6 +849,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             onBeautify={runBeautifyAi}
             onPrompt={runPromptAi}
             onVectorize={runVectorize}
+            onRewrite={runRewrite}
           />
         )}
       </div>

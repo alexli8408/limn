@@ -22,12 +22,19 @@ interface Props {
   run: AiRun | null;
   onDismiss: () => void;
   onCancel: () => void;
-  onBeautify: (instruction?: string, quality?: "fast" | "high") => Promise<void>;
-  onPrompt: (prompt: string, quality?: "fast" | "high") => Promise<void>;
+  /**
+   * Takes no arguments on purpose.
+   *
+   * It used to accept an optional instruction and a quality flag, which meant
+   * the primary action of the app opened a form: a field to read, a checkbox to
+   * weigh up, and only then a button. Both were things the app can decide
+   * better than someone can mid-sketch, and neither earned the hesitation.
+   */
+  onBeautify: () => Promise<void>;
+  onPrompt: (prompt: string) => Promise<void>;
   onVectorize: (file: File) => Promise<void>;
+  onRewrite: () => Promise<void>;
 }
-
-type Tab = "cleanup" | "describe" | "photo";
 
 /**
  * Shared button skins.
@@ -125,12 +132,46 @@ function RunBox({
   );
 }
 
+/**
+ * One secondary action: what it is called, and a line on what it does.
+ *
+ * The detail line is not decoration. Each of these spends an API call and
+ * changes the board, and a name on its own ("From a photo") does not tell
+ * anyone what they are about to get back.
+ */
+function Row({
+  label,
+  detail,
+  disabled,
+  onClick,
+  expanded,
+}: {
+  label: string;
+  detail: string;
+  disabled: boolean;
+  onClick: () => void;
+  expanded?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-expanded={expanded}
+      className="w-full rounded-sm px-2 py-1.5 text-left transition hover:bg-[var(--ink-raised)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+    >
+      <span className="block text-xs font-medium text-[var(--ink-text)]">{label}</span>
+      <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--ink-faint)]">
+        {detail}
+      </span>
+    </button>
+  );
+}
+
 export default function AiPanel(props: Props) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>("cleanup");
-  const [instruction, setInstruction] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [quality, setQuality] = useState<"fast" | "high">("fast");
+  const [describing, setDescribing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const busy = props.run?.state === "running";
@@ -175,7 +216,7 @@ export default function AiPanel(props: Props) {
           ) : (
             <span aria-hidden>✦</span>
           )}
-          Clean up
+          Beautify
         </button>
       </div>
     );
@@ -185,122 +226,89 @@ export default function AiPanel(props: Props) {
     <div
       className={`${anchor} overflow-hidden rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] shadow-2xl`}
     >
-      <div className="flex items-center border-b border-[var(--ink-line)]" role="tablist">
-        {(
-          [
-            ["cleanup", "Clean up"],
-            ["describe", "Describe"],
-            ["photo", "From photo"],
-          ] as [Tab, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key)}
-            className={`flex-1 px-3 py-2.5 text-xs font-medium transition ${
-              tab === key
-                ? "border-b-2 border-[var(--ink-accent)] text-[var(--ink-text)]"
-                : "text-[var(--ink-faint)] hover:text-[var(--ink-dim)]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between border-b border-[var(--ink-line)] px-3 py-2.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">
+          Beautify
+        </span>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="px-3 py-2.5 text-[var(--ink-faint)] transition hover:text-[var(--ink-text)]"
+          className="text-[var(--ink-faint)] transition hover:text-[var(--ink-text)]"
           aria-label="Close"
         >
           ×
         </button>
       </div>
 
+      {/* A list of what it does, not a form to fill in. Tabs used to sit here,
+          and two of the three existed only to hold a text box. */}
       <div className="space-y-3 p-3">
-        {tab === "cleanup" && (
-          <>
-            <p className="text-xs leading-relaxed text-[var(--ink-dim)]">
-              Redraws a diagram cleanly and keeps it where you put it. Select
-              shapes to limit it, or select nothing to do the whole board.
-            </p>
-            <input
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              placeholder="Optional: what to emphasise…"
-              className={FIELD}
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void props.onBeautify(instruction || undefined, quality)}
-              className={ACTION}
-            >
-              Clean up
-            </button>
-          </>
-        )}
+        <p className="text-xs leading-relaxed text-[var(--ink-dim)]">
+          Tidies whatever is on the board. A diagram is redrawn with square
+          corners and bound arrows. A sketch keeps its own shapes and gets them
+          straightened and lined up. Select part of the board to limit it.
+        </p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void props.onBeautify()}
+          className={ACTION}
+        >
+          Beautify
+        </button>
 
-        {tab === "describe" && (
-          <>
+        <div className="space-y-1 border-t border-[var(--ink-line)] pt-3">
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void props.onVectorize(file);
+              event.target.value = "";
+            }}
+          />
+          <Row
+            label="From a photo"
+            detail="Traces a photographed whiteboard into shapes you can edit, and reads the handwriting back."
+            disabled={busy}
+            onClick={() => fileInput.current?.click()}
+          />
+          <Row
+            label="Fix the writing"
+            detail="Corrects spelling and capitalisation in every label, and changes nothing else."
+            disabled={busy}
+            onClick={() => void props.onRewrite()}
+          />
+          <Row
+            label="Draw from a description"
+            detail="Say what the diagram shows and it gets built and laid out."
+            disabled={busy}
+            expanded={describing}
+            onClick={() => setDescribing((was) => !was)}
+          />
+        </div>
+
+        {describing && (
+          <div className="space-y-2">
             <textarea
+              autoFocus
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               rows={3}
-              placeholder="A CI pipeline: commit, build, test, canary, production…"
+              placeholder="A CI pipeline: commit, build, test, canary, production"
               className={`${FIELD} resize-none`}
             />
             <button
               type="button"
               disabled={busy || prompt.trim().length < 3}
-              onClick={() => void props.onPrompt(prompt, quality)}
+              onClick={() => void props.onPrompt(prompt)}
               className={ACTION}
             >
-              Generate diagram
+              Draw it
             </button>
-          </>
-        )}
-
-        {tab === "photo" && (
-          <>
-            <p className="text-xs leading-relaxed text-[var(--ink-dim)]">
-              Photograph a physical whiteboard. OpenCV corrects the perspective,
-              traces the ink into shapes you can edit, and the writing on it is
-              read back as text.
-            </p>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void props.onVectorize(file);
-                event.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => fileInput.current?.click()}
-              className="w-full rounded-sm border border-dashed border-[var(--ink-line-bright)] px-3 py-4 text-xs font-medium text-[var(--ink-dim)] transition hover:border-[var(--ink-accent)] disabled:cursor-not-allowed disabled:text-[var(--ink-faint)]"
-            >
-              Choose a photo
-            </button>
-          </>
-        )}
-
-        {(tab === "cleanup" || tab === "describe") && (
-          <label className="flex items-center gap-2 text-[11px] text-[var(--ink-faint)]">
-            <input
-              type="checkbox"
-              checked={quality === "high"}
-              onChange={(event) => setQuality(event.target.checked ? "high" : "fast")}
-              className="h-3 w-3 accent-[var(--ink-accent)]"
-            />
-            Higher quality (slower, thinks harder)
-          </label>
+          </div>
         )}
 
         {props.run && (
