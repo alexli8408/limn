@@ -126,7 +126,11 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
   // Built from the host this request arrived on, so a link copied on localhost
   // points at localhost and one copied on a preview points at that preview.
   const origin = await requestOrigin();
-  const shareUrl = `${origin}/board/${board.id}?t=${board.share_token}`;
+  // The token is only sent to people who can actually invite with it. A viewer
+  // used to receive a working editor link in their page payload, which is a
+  // privilege escalation available to anyone who opened devtools.
+  const shareUrl =
+    role === "viewer" ? "" : `${origin}/board/${board.id}?t=${board.share_token}`;
 
   return (
     <main className="h-full">

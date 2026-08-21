@@ -18,12 +18,20 @@ interface Props {
   beautifyStats: BeautifyStats;
 }
 
+/**
+ * Status colours come from the theme, not from Tailwind's palette.
+ *
+ * theme.css defines --ink-good, --ink-warn and --ink-bad for exactly this, and
+ * the raw emerald/amber/red were the only colours on the board that belonged to
+ * no palette. The offline dot uses --ink-faint rather than a neutral grey, so it
+ * keeps the blue cast the rest of the neutrals have.
+ */
 const STATUS_LABEL: Record<ConnectionStatus, { text: string; tone: string }> = {
-  connecting: { text: "Connecting", tone: "bg-amber-400" },
-  connected: { text: "Live", tone: "bg-emerald-500" },
-  reconnecting: { text: "Reconnecting", tone: "bg-amber-400" },
-  offline: { text: "Offline", tone: "bg-neutral-400" },
-  error: { text: "Error", tone: "bg-red-500" },
+  connecting: { text: "Connecting", tone: "bg-[var(--ink-warn)]" },
+  connected: { text: "Live", tone: "bg-[var(--ink-good)]" },
+  reconnecting: { text: "Reconnecting", tone: "bg-[var(--ink-warn)]" },
+  offline: { text: "Offline", tone: "bg-[var(--ink-faint)]" },
+  error: { text: "Error", tone: "bg-[var(--ink-bad)]" },
 };
 
 function relative(at: number | null): string {
@@ -63,16 +71,21 @@ export default function PresenceBar(props: Props) {
         {props.title}
       </span>
 
+      {/* aria-live so the one piece of state that actually matters is announced
+          rather than only being visible, and the writer explanation is real text
+          rather than a title attribute no keyboard or screen reader user reaches. */}
       <span
+        aria-live="polite"
         className="flex items-center gap-1.5 rounded-sm border border-[var(--ink-line)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-dim)]"
-        title={
-          props.isWriter
-            ? "This tab is the elected writer and is persisting the board"
-            : "Another tab is persisting the board"
-        }
       >
-        <span className={`h-1.5 w-1.5 rounded-full ${status.tone}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${status.tone}`} aria-hidden />
         {status.text}
+        <span className="sr-only">
+          .{" "}
+          {props.isWriter
+            ? "This tab is saving the board."
+            : "Another tab is saving the board."}
+        </span>
       </span>
 
       <span className="hidden font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)] sm:inline">
@@ -120,13 +133,17 @@ export default function PresenceBar(props: Props) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={props.onShare}
-          className="rounded-sm bg-[var(--ink-accent)] px-2.5 py-1 text-xs font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
-        >
-          Share
-        </button>
+        {/* A viewer cannot invite anyone, and handing them the dialog also
+            handed them a working editor link. */}
+        {props.role !== "viewer" && (
+          <button
+            type="button"
+            onClick={props.onShare}
+            className="rounded-sm bg-[var(--ink-accent)] px-2.5 py-1 text-xs font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
+          >
+            Share
+          </button>
+        )}
       </div>
     </header>
   );

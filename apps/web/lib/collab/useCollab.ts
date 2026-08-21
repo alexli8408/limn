@@ -68,6 +68,8 @@ export interface CollabHandle {
   ) => void;
   /** Forces a snapshot write, e.g. before navigating away. */
   flush: () => Promise<void>;
+  /** Tears the channel down and joins again, for a Retry the user asked for. */
+  reconnect: () => void;
 }
 
 /** How long to wait before retrying a flush that had nowhere to send. */
@@ -113,6 +115,14 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const [peerActivity, setPeerActivity] = useState<PeerActivity | null>(null);
   const [savedVersion, setSavedVersion] = useState(initialVersion);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  /**
+   * Bumped to force a fresh subscribe.
+   *
+   * Supabase reconnects on its own, but not always promptly and not at all once
+   * a channel has errored, so a user staring at "Not connected" needs a way to
+   * ask for a retry rather than reloading and risking unsaved work.
+   */
+  const [generation, setGeneration] = useState(0);
 
   const peerId = useMemo(newPeerId, []);
   const color = useMemo(() => presenceColorFor(userId), [userId]);
@@ -494,7 +504,13 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     avatarUrl,
     applyRemote,
     snapshots,
+    generation,
   ]);
+
+  const reconnect = useCallback(() => {
+    setStatus("connecting");
+    setGeneration((n) => n + 1);
+  }, []);
 
   /** Persist on tab close. `visibilitychange` fires where `beforeunload` does not. */
   useEffect(() => {
@@ -537,5 +553,6 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     publishCursor,
     announceAi,
     flush,
+    reconnect,
   };
 }

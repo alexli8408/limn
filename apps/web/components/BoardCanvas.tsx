@@ -21,6 +21,8 @@ import RemoteCursors from "./RemoteCursors";
 import PresenceBar from "./PresenceBar";
 import ShareDialog from "./ShareDialog";
 import AiPanel, { type AiRun } from "./AiPanel";
+import ConnectionBar from "./ConnectionBar";
+import FirstRunHint from "./FirstRunHint";
 import "@excalidraw/excalidraw/index.css";
 
 // Imported directly rather than via next/dynamic: BoardCanvasLoader already
@@ -47,6 +49,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const [beautifyOn, setBeautifyOn] = useState(true);
   const [aiRun, setAiRun] = useState<AiRun | null>(null);
   const [sharing, setSharing] = useState(false);
+  // The hint is for an empty board only, and the first stroke retires it.
+  const [showHint, setShowHint] = useState(
+    () => props.initialElements.filter((el) => !el.isDeleted).length === 0,
+  );
   // Shown in the header. Starts as whatever the server rendered and is replaced
   // when the AI names an untitled board, so the change is visible immediately
   // rather than only after a reload.
@@ -145,6 +151,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       if (version === lastLocalVersion.current) return;
       lastLocalVersion.current = version;
 
+      if (scene.some((el) => !el.isDeleted)) setShowHint(false);
       collab.publishScene(scene);
       beautify.onSceneChange(scene, appState);
     },
@@ -469,6 +476,8 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         beautifyStats={beautify.stats}
       />
 
+      <ConnectionBar status={collab.status} onRetry={collab.reconnect} />
+
       {sharing && (
         <ShareDialog
           boardId={props.boardId}
@@ -506,11 +515,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           </Footer>
         </Excalidraw>
 
+        {showHint && !readOnly && <FirstRunHint />}
+
         <RemoteCursors cursors={collab.cursors} api={api} />
 
         {collab.peerActivity && (
           <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] px-3 py-1.5 text-xs text-[var(--ink-dim)] shadow-lg">
-            <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+            <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--ink-good)]" />
             {collab.peerActivity.label} is{" "}
             {collab.peerActivity.mode === "vectorize"
               ? "tracing a photo"
