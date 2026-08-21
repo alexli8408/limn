@@ -44,8 +44,13 @@ export interface BoardCanvasProps {
   linkRole: Role;
 }
 
+/** Stable empty set, so getHeldIds does not allocate on every remote frame. */
+const EMPTY_HELD: ReadonlySet<string> = new Set();
+
 export default function BoardCanvas(props: BoardCanvasProps) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  // TEMPORARY verification scaffold. Not committed.
+  if (typeof window !== "undefined" && api) (window as never as Record<string, unknown>).__limn = api;
   const [beautifyOn, setBeautifyOn] = useState(true);
   const [aiRun, setAiRun] = useState<AiRun | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -78,6 +83,8 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   // Guards re-entry: applying a remote update triggers onChange, which would
   // otherwise be published straight back out as a local edit.
   const applyingRemote = useRef(false);
+  /** True between pointer down and pointer up, so a drag can be protected. */
+  const pointerDown = useRef(false);
   /** Aborts the AI request in flight, so Cancel actually stops the wait. */
   const aiAbort = useRef<AbortController | null>(null);
   const lastLocalVersion = useRef(-1);
@@ -109,6 +116,18 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     [api, props.initialElements],
   );
 
+  /**
+   * What the user has hold of right now.
+   *
+   * Only while the pointer is down: a selection sitting idle should still take
+   * a peer's update, it is only an in-progress gesture that must not have the
+   * object swapped underneath it.
+   */
+  const getHeldIds = useCallback((): ReadonlySet<string> => {
+    if (!api || !pointerDown.current) return EMPTY_HELD;
+    return new Set(Object.keys(api.getAppState().selectedElementIds ?? {}));
+  }, [api]);
+
   const collab = useCollab({
     boardId: props.boardId,
     userId: props.userId,
@@ -120,6 +139,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     initialVersion: props.initialVersion,
     onRemoteScene,
     getLiveElements,
+    getHeldIds,
   });
 
   /** Applies a locally produced scene and publishes it in one step. */
@@ -173,6 +193,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       pointer: { x: number; y: number };
       button: "up" | "down";
     }) => {
+      pointerDown.current = payload.button === "down";
       collab.publishCursor(
         payload.pointer.x,
         payload.pointer.y,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { BoardRole } from "@/lib/supabase/types";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { removeCollaborator, rotateShareLink, setLinkRole } from "@/app/actions";
@@ -31,6 +31,46 @@ export default function ShareDialog(props: Props) {
   const [pending, startTransition] = useTransition();
 
   const supabase = supabaseBrowser();
+  const panel = useRef<HTMLDivElement>(null);
+  const firstField = useRef<HTMLInputElement>(null);
+
+  /**
+   * Keyboard behaviour a dialog is required to have.
+   *
+   * This had none: no Escape, no focus move, no trap. Opening it left focus
+   * behind on the Share button, so a keyboard user tabbed from the page
+   * underneath into a dialog they could not see they were in, and could tab
+   * straight back out of it while it still covered the screen.
+   */
+  useEffect(() => {
+    firstField.current?.focus();
+    firstField.current?.select();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        props.onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panel.current) return;
+
+      const focusable = panel.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [props]);
 
   const load = useCallback(async () => {
     const { data: rows, error: rowsError } = await supabase
@@ -131,7 +171,9 @@ export default function ShareDialog(props: Props) {
       onClick={props.onClose}
     >
       <div
+        ref={panel}
         role="dialog"
+        aria-modal="true"
         aria-label="Share this board"
         className="w-full max-w-md rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
@@ -158,6 +200,7 @@ export default function ShareDialog(props: Props) {
             </p>
             <div className="flex gap-2">
               <input
+                ref={firstField}
                 readOnly
                 value={url}
                 onFocus={(event) => event.currentTarget.select()}

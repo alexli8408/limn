@@ -52,6 +52,15 @@ export interface UseCollabOptions {
    * milliseconds before a peer's frame landed vanished mid-draw.
    */
   getLiveElements?: () => SyncElement[];
+  /**
+   * Ids the local user is currently manipulating: the selection, plus whatever
+   * is under a pointer that is down.
+   *
+   * reconcile has taken localHeldIds since it was written and no caller ever
+   * supplied it, so a peer's echo landing mid-drag replaced the object being
+   * dragged and the gesture jumped to somebody else's version of it.
+   */
+  getHeldIds?: () => ReadonlySet<string>;
 }
 
 /** A collaborator's in-flight AI generation, so the canvas is not silently busy. */
@@ -117,6 +126,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     initialVersion,
     onRemoteScene,
     getLiveElements,
+    getHeldIds,
   } = options;
 
   const supabase = supabaseBrowser();
@@ -158,6 +168,8 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   onRemoteRef.current = onRemoteScene;
   const liveRef = useRef(getLiveElements);
   liveRef.current = getLiveElements;
+  const heldRef = useRef(getHeldIds);
+  heldRef.current = getHeldIds;
 
   const writer = useMemo(() => {
     const elected = electWriter(peers);
@@ -357,7 +369,9 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     if (incoming.length === 0) return;
     // The canvas, not the ref, whenever the canvas can be asked.
     const base = liveRef.current?.() ?? sceneRef.current;
-    const { elements, changed } = reconcile(base, incoming);
+    const { elements, changed } = reconcile(base, incoming, {
+      localHeldIds: heldRef.current?.(),
+    });
     if (changed.length === 0) return;
 
     sceneRef.current = elements;
