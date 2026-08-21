@@ -1,7 +1,8 @@
 # Setup, from scratch
 
-Nine phases. Phases 1–5 get it running on your machine; 6–9 put it on the
-internet. You can stop after 5 and still have a working app.
+Ten phases. Phases 1–5 get it running on your machine, 6–9 put it on the
+internet, and 10 measures what you built. You can stop after 5 and still have a
+working app.
 
 Each phase ends with something you can check, so a mistake surfaces where it was
 made rather than three steps later.
@@ -39,7 +40,7 @@ pnpm build:packages
 Prove the parts that don't need credentials actually work:
 
 ```bash
-pnpm --filter @limn/protocol test    # 20 tests, convergence properties
+pnpm --filter @limn/protocol test    # 21 tests, convergence properties
 pnpm --filter @limn/shapes test      # 5 tests, prints the 95.8% benchmark
 ```
 
@@ -201,10 +202,12 @@ The daily allowance is scoped per model, so switching `GEMINI_MODEL` to
 `gemini-3.1-flash-lite` or `gemini-3.5-flash` gives you a fresh 20. That is the
 practical way to keep demoing after you run out.
 
-Image generation is the exception: every image model returns 429 listing quotas
+Image models are the exception: every one of them returns 429 listing quotas
 with no value, on a key that has never called them, which is how Google reports
-"no allowance on this tier". So the **Illustrate** feature needs billing enabled.
-Clean up, Describe, Photo, Snap and everything else work on the free tier.
+"no allowance on this tier". Nothing in the app calls one any more, so this
+costs you nothing. Beautify, From a photo, Fix the writing and Draw from a
+description are all text calls and all work on a free key. Snapping a stroke is
+local geometry and spends no request at all.
 
 ---
 
@@ -308,23 +311,51 @@ different subsystem, so a failure tells you which one.
 6. **Wait ~5 seconds, reload.** → your drawing is still there, header shows a
    bumped `v` number.
    *Exercises: writer election and the snapshot compare-and-swap.*
-7. **Draw a few boxes and arrows, then hit the violet "✦ Clean up" button at
-   the bottom right and, on the "Clean up" tab, the "Clean up" button.**
-   *Exercises: Gemini, constrained decoding, the compiler.*
-8. **"✦ Clean up" → the "From photo" tab → "Choose a photo"**, and pick a
-   photo of a whiteboard or a
-   pen-and-paper sketch. → shapes land as editable elements, and any handwriting
-   on them comes back as text sitting where it was written.
-   *Exercises: the OpenCV pipeline end to end, and the Gemini transcription pass
-   that runs beside it.*
-9. **Go back to the dashboard.** → the board you just drew on shows a thumbnail
-   of it rather than an empty tile.
-   *Exercises: the `board-thumbnails` bucket and its storage policies. A blank
-   tile here almost always means `20260821000200_thumbnail_policies.sql` has not
-   been pushed.*
+7. **Draw a few boxes joined by arrows, select them, then hit the violet
+   "✦ Beautify" button at the bottom right and, in the panel, the "Beautify"
+   button.** → the sketch is redrawn square and aligned, with the arrows bound
+   to the boxes, so dragging a box drags its arrows with it. The panel reports
+   node and edge counts, the latency and which model answered.
+   Select first: with nothing selected the whole board goes up as one sketch,
+   and by now it also holds the rectangle from step 2 and the squiggle from
+   step 3.
+   *Exercises: Gemini, constrained decoding, the layout compiler.*
+8. **Now draw a picture somewhere else on the board: a house as a square with a
+   triangle on top, two windows, a sun, a line for the ground. Select it, then
+   "✦ Beautify" → "Beautify".** → nothing is replaced. Your own strokes stay,
+   squared up and lined up: the walls straighten, the windows match each other,
+   the sun rounds. Count the shapes first if you like; the same number is there
+   afterwards.
+   Turn Snap off in the header before you draw this one. Leave it on and every
+   stroke is cleaned as you lift the pen, so the straightening has nothing left
+   to do and only the lining-up shows.
+   *Exercises: the drawing path. This is the case that used to come back as a
+   refusal, so the regressions to watch for are a decline, or boxes and arrows
+   where your house was.*
+9. **Label two or three shapes with deliberate typos, then "✦ Beautify" → "Fix
+   the writing".** → the labels come back spelled and capitalised properly and
+   nothing else moves. With nothing to correct it says so rather than editing.
+   *Exercises: the rewrite pass, which returns replacement text per element id
+   and no geometry at all.*
+10. **"✦ Beautify" → "From a photo"**, which opens a file picker, and pick a
+    photo of a whiteboard or a pen-and-paper sketch. → shapes land beside what
+    is already on the board as editable elements, and any handwriting on them
+    comes back as text sitting where it was written.
+    *Exercises: the OpenCV pipeline end to end, and the Gemini transcription
+    pass that runs beside it.*
+11. **Go back to the dashboard.** → the board you just drew on shows a thumbnail
+    of it rather than an empty tile.
+    *Exercises: the `board-thumbnails` bucket and its storage policies. A blank
+    tile here almost always means `20260821000200_thumbnail_policies.sql` has
+    not been pushed.*
 
 If step 5 fails with a policy error, the `realtime.messages` policies from
 migration `...000300_rls.sql` did not apply. Re-run `./scripts/db.sh push`.
+
+Steps 7 to 10 each spend one Gemini request, four of the twenty a free key gets
+per day. The trace in step 10 runs on your own vision service and costs none of
+them. If you plan to run the list more than once, read the note on switching
+`GEMINI_MODEL` in Phase 3 first.
 
 **You now have a fully working app.** Phases 6–9 are deployment.
 
@@ -387,7 +418,7 @@ Save (the service restarts automatically).
 This is the easiest step to forget. Skip it and photo vectorisation fails in
 production with a browser CORS error that looks like the service being down.
 
-> **Check:** on the deployed site, "✦ Clean up" → From photo works.
+> **Check:** on the deployed site, "✦ Beautify" → "From a photo" works.
 
 ---
 
@@ -444,7 +475,7 @@ full thing. It prints its projected message count first and refuses runs over
 ```bash
 pnpm dev                  # web :3000 + vision :8000
 pnpm build:packages       # ALWAYS before pnpm test, see below
-pnpm test                 # 76 tests, or 80 with a GEMINI_API_KEY in .env
+pnpm test                 # protocol, shapes, web, db, vision, in that order
 pnpm build                # production build
 pnpm loadtest             # realtime benchmark
 PGUSER=$(whoami) ./supabase/tests/run.sh    # security assertions
@@ -458,11 +489,13 @@ grading the previous build: it goes green and means nothing. Run
 `pnpm build:packages && pnpm test`.
 
 **`pnpm test` calls the real Gemini API.** `lib/ai/live-test.ts` reads the
-repo-root `.env`, not `apps/web/.env.local`, so a key there makes four
+repo-root `.env`, not `apps/web/.env.local`, so a key there makes five
 integration tests hit the network and spend free-tier quota (20/day per model).
-A spent quota still reports green: the helper catches `RESOURCE_EXHAUSTED`,
-prints `skipped:` to stderr, and the test passes. For the offline 35, run from
-`apps/web`:
+One of them is the whole drawing path, fixture to polished elements, which is
+the only way to check that the model still groups a house instead of calling it
+a diagram. A spent quota still reports green: the helper catches
+`RESOURCE_EXHAUSTED`, prints `skipped:` to stderr, and the test passes. For the
+offline set only, run from `apps/web`:
 
 ```bash
 pnpm exec vitest run --exclude '**/*.integration.test.ts' --exclude '**/node_modules/**'
@@ -486,9 +519,11 @@ writes the key back from `.env`.
 | Subscribe fails with a policy error | `...000300_rls.sql` didn't apply; re-run `db push` |
 | Second window shows no cursor | Check both are the *same* board id; a share link without `?t=` grants nothing |
 | Snapping never fires | Only freehand (pencil) strokes are recognised. The rectangle *tool* is already a rectangle |
-| Clean up returns 502 | `GEMINI_API_KEY` missing or rate-limited |
+| Beautify turns a picture into boxes and arrows | The whole selection is classified once, as a diagram or a drawing. A board holding both has to be one of them, so select just the picture |
+| Beautify says nothing moved | The model named groups but none of the tidying it chose changed a coordinate, which is the honest answer on a sketch that is already square |
+| Beautify returns 502 | `GEMINI_API_KEY` missing or rate-limited |
 | Dashboard tiles are all blank | `...000200_thumbnail_policies.sql` has not been pushed, so the upload is refused by RLS |
-| Photo trace returns shapes but no words | Handwriting is transcribed by Gemini, not OpenCV, so this is the same `GEMINI_API_KEY` as Clean up |
+| Photo trace returns shapes but no words | Handwriting is transcribed by Gemini, not OpenCV, so this is the same `GEMINI_API_KEY` as Beautify |
 | Photo trace times out | Cold Render instance; first request after a sleep pays ~50s |
 | Photo trace fails only in production | `ALLOWED_ORIGINS` (Phase 8) |
 | Build fails mentioning `serverEnv()` | Something imported it from a client component, which is the guard working |

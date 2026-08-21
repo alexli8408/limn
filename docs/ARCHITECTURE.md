@@ -245,22 +245,103 @@ cross-references and arrow binding `focus`/`gap` values to all agree. A language
 model produces something that looks right and renders as a pile of unbound
 arrows. They appear attached until the first time anything moves.
 
-So the model gets a much smaller vocabulary (`LimnDiagram`: nodes, edges, labels,
-grouping) under constrained decoding via `responseSchema`, and a deterministic
-compiler turns that into a scene through `convertToExcalidrawElements`, the
-skeleton API Excalidraw publishes for this, which handles all of the bookkeeping
-including bindings.
+So the model gets a much smaller vocabulary (`LimnDiagram`) under constrained
+decoding via `responseSchema`, and deterministic code turns that into geometry.
+The model does the part it is good at, reading intent out of a sketch, and none
+of the part it is bad at.
 
-The model does the part it is good at (reading intent out of a sketch) and none of
-the part it is bad at.
+### One button, two vocabularies
+
+The first field the model fills in is `kind`, and it decides which half of the
+IR carries the answer:
+
+| `kind` | the model returns | the code does |
+|---|---|---|
+| `diagram` | nodes and edges, each naming the `sourceIds` it came from | compiles a fresh scene through `convertToExcalidrawElements`, the skeleton API Excalidraw publishes for this, and tombstones what it replaced |
+| `drawing` | groups: named sets of ids already on the canvas, each with a list of ops | edits those elements where they stand, and deletes nothing |
+| `empty` | neither | declines, and says what it saw |
+
+The halves are exclusive on the way in, not just by instruction: `parseDiagram`
+empties nodes and edges for a drawing and empties groups for a diagram, so a
+model that hedges by filling in both does not get both applied. A missing `kind`
+decodes as `"drawing"` for the same reason, since a truncated response then
+lands on the path that cannot destroy anything.
+
+Both halves are applied in the browser, not in the route. The route returns the
+IR and nothing else, because the compiler calls `convertToExcalidrawElements`
+out of the canvas bundle, a package with DOM assumptions that has no business
+inside a serverless function. The geometry is still isolated from it: `plan.ts`
+and `polish.ts` import nothing from `@excalidraw/excalidraw`, which touches
+`window` at module load, and that is what leaves both of them testable in Node.
+
+### Why a drawing had no representation
+
+`drawing` used to be a refusal, and the reason was not that the model could not
+see a house. It named one perfectly well. There was nowhere to write the answer
+down.
+
+The IR could express exactly one idea: boxes joined by arrows. A house contains
+no node and no edge. There is no arrow from the roof to the wall, the roof is
+not a step in a process, and nothing anyone means by "the sun" survives being
+called a node with a label. Compiling a picture through that vocabulary replaced
+every stroke the author drew with a rectangle whose contents the model had to
+invent, so the better the compiler worked the more of their drawing it
+destroyed. Given a vocabulary that could only describe structure, refusing
+everything that was not structure was the honest answer.
+
+What was missing was a second thing the model could say.
+
+### Groups: same principle, applied in place
+
+A group is a name, the ids of elements already on the canvas, and at most six
+ops from a fixed list of twelve: `align-left`, `align-right`, `align-top`,
+`align-bottom`, `align-center-x`, `align-center-y`, `distribute-x`,
+`distribute-y`, `equalize-size`, `straighten`, `regularize`, `match-style`.
+
+That is the entire vocabulary, and it is the same bargain as nodes and edges.
+The model says which strokes are the house and that they were meant to share a
+baseline. It is not told where the baseline is and is never asked for one.
+`polish.ts` reads the sizes and positions off the elements themselves and
+derives every coordinate from those, the way `layout.ts` derives them for a
+diagram built from nothing.
+
+What differs is what happens to the input. A rebuild has understood the sketch,
+so it can afford to replace it. A polish has understood nothing: it has been
+told what belongs with what and that is all. So elements out equals elements in,
+always. Nothing is deleted, nothing is tombstoned, and an id the model invented
+matches nothing and is skipped rather than created. A polish that quietly loses
+a stroke is worse than no polish at all, and unlike a bad rebuild it does not
+announce itself on screen.
+
+Three rules settle what the model leaves open:
+
+- **One id belongs to one group.** Ids are claimed as the groups arrive and a
+  repeat is dropped. An element named twice is aligned by the first group and
+  then pulled off that line by the second, so the first group ends up crooked
+  with nothing on screen to say why.
+- **Ops run in a fixed order**, whatever order they were listed in. Sizes settle
+  before positions, because equalising a width moves the left edge and an
+  align-left before that would leave the group unaligned. Distribute runs last,
+  since it reads the final sizes and the final span.
+- **Ties break on scene order**, not on the order members were named, so the
+  same sketch and the same groups tidy the same way twice.
+
+Three things a group can name are not simply moved with the rest. An arrow bound
+at either end stays where it is, because Excalidraw re-routes a bound arrow from
+its endpoints when they move, so translating it as well applies the move twice
+and leaves it attached to nothing. Text bound into a container is never a member
+in its own right: it travels with its container by the same delta, since
+aligning a label separately tears it out of the box it labels. An element the
+author locked is skipped outright, because pinning it was deliberate and a
+tidy-up is not a reason to overrule it.
 
 ### Same intent means same arrangement
 
-In `preserve` mode, the default for cleaning up a sketch, each node keeps the
-bounding box of whatever the user drew for it, identified by the `sourceIds` the
-model reports. Only sizes and alignment change, via 1-D clustering that snaps
-shared baselines, equalises near-equal sizes and evens gaps that are already
-close to even.
+That principle predates polish, on the diagram side. In `preserve` mode, the
+default when a sketch is being rebuilt, each node keeps the bounding box of
+whatever the user drew for it, identified by the `sourceIds` the model reports.
+Only sizes and alignment change, via 1-D clustering that snaps shared baselines,
+equalises near-equal sizes and evens gaps that are already close to even.
 
 That last qualifier matters: forcing uniform spacing on a deliberately clustered
 layout destroys grouping the user meant to express.
@@ -269,8 +350,8 @@ layout destroys grouping the user meant to express.
 
 Picked by measurement, not by version number. `scripts/bench-gemini.py` runs the
 app's real prompts, schema and fixtures three times per model and scores the
-three behaviours that matter: declining a drawing, accepting a flowchart, and
-generating a diagram from text.
+three behaviours that matter: calling a picture a drawing and returning no nodes
+for it, accepting a flowchart, and generating a diagram from text.
 
 | model | correct | median latency | errors |
 |---|---|---|---|
