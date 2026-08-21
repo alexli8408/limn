@@ -320,6 +320,52 @@ test("regularize redraws a hand-drawn circle as a circle, without changing its t
   assert.deepEqual((sun.points as [number, number][])[0], [0, 0]);
 });
 
+test("a stroke drawn right to left aligns by its ink, not its anchor", () => {
+  /**
+   * Excalidraw stores x,y as the position of points[0], not as the top-left of
+   * the bounding box, and points may be negative. A stroke drawn right to left
+   * therefore has its anchor at the RIGHT end and negative x offsets, so its ink
+   * sits between x - width and x.
+   *
+   * Reading x as the box corner puts that stroke a full width away from where it
+   * actually is, and alignment then moves it to the wrong place: the user sees
+   * the one stroke they drew backwards fly off on its own.
+   */
+  const existing = [
+    sketch({ id: "box", type: "rectangle", x: 400, y: 0, width: 100, height: 60 }),
+    sketch({
+      id: "backwards",
+      type: "freedraw",
+      // Anchor on the right, ink running left to x = 300.
+      x: 400,
+      y: 200,
+      width: 100,
+      height: 0,
+      points: [
+        [0, 0],
+        [-100, 0],
+      ],
+    }),
+  ];
+
+  const { elements } = polishSketch(existing, [group(["box", "backwards"], ["align-left"])]);
+  const stroke = elements.find((el) => String(el.id) === "backwards");
+  assert.ok(stroke);
+
+  // Its leftmost ink must end up on the shared edge at x = 300 (the box's left
+  // is 400, the stroke's ink starts at 300, so 300 is the shared left).
+  const xs = (stroke.points as [number, number][]).map(([dx]) => Number(stroke.x) + dx);
+  const inkLeft = Math.min(...xs);
+  const box = elements.find((el) => String(el.id) === "box");
+  assert.ok(box);
+
+  assert.equal(
+    inkLeft,
+    Number(box.x),
+    `the stroke's ink starts at ${inkLeft}, the box at ${Number(box.x)}`,
+  );
+});
+
 test("equalize-size makes lines the same length without turning them", () => {
   /**
    * Sun rays: one straight up, one straight out, one diagonal. They should end

@@ -138,7 +138,34 @@ function boxOf(el: Draft): Box | null {
   const width = Number(el.width ?? 0);
   const height = Number(el.height ?? 0);
   if (![x, y, width, height].every(Number.isFinite)) return null;
-  return { x, y, width, height };
+
+  /**
+   * For a stroke, x and y are the anchor of points[0], not the corner of the
+   * bounding box, and the offsets may be negative.
+   *
+   * A stroke drawn right to left has its anchor at the RIGHT end, so its ink
+   * runs from x - width to x. Reading x as the corner puts it a full width away
+   * from where it is, and alignment then moves it to match a box that was never
+   * there: the one stroke someone happened to draw backwards flies off on its
+   * own while the rest line up.
+   *
+   * Rectangles and ellipses genuinely do use x,y as the corner, and they have no
+   * points, so they fall through unchanged.
+   */
+  const points = pointsOf(el);
+  if (!points) return { x, y, width, height };
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [px, py] of points) {
+    if (px < minX) minX = px;
+    if (px > maxX) maxX = px;
+    if (py < minY) minY = py;
+    if (py > maxY) maxY = py;
+  }
+  return { x: x + minX, y: y + minY, width: maxX - minX, height: maxY - minY };
 }
 
 /** Element-local stroke points, or null for anything that is not a stroke. */
@@ -231,13 +258,18 @@ export function polishSketch(
     const fromX = Number(draft.x);
     const fromY = Number(draft.y);
     if (!Number.isFinite(fromX) || !Number.isFinite(fromY)) return;
-    const nextX = round(x);
-    const nextY = round(y);
-    const dx = nextX - fromX;
-    const dy = nextY - fromY;
+
+    // x and y name where the BOX should end up, not where the anchor should.
+    // Those differ for a stroke, see boxOf, and every caller here is reasoning
+    // about visible edges. Moving by the delta keeps the two in step without
+    // asking any caller to know the difference.
+    const box = boxOf(draft);
+    if (!box) return;
+    const dx = round(x) - box.x;
+    const dy = round(y) - box.y;
     if (dx === 0 && dy === 0) return;
-    draft.x = nextX;
-    draft.y = nextY;
+    draft.x = round(fromX + dx);
+    draft.y = round(fromY + dy);
     for (const id of boundTextIds(draft)) {
       const text = draftOf(id);
       if (!text) continue;
