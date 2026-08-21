@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { serverEnv } from "@/lib/env";
 import { geminiDiagramSchema, parseDiagram, type LimnDiagram } from "./schema";
 
@@ -103,6 +103,17 @@ interface GenerateArgs {
   temperature: number;
   /** Used when `model` is refused for quota reasons. */
   fallbackModel?: string;
+  /**
+   * How much the model may reason before answering.
+   *
+   * Left unset it reasons dynamically, which is most of the wall clock a user
+   * waits through. Measured on the app's own fixtures with
+   * scripts/bench-thinking.py: the default spends 181 thought tokens declining a
+   * drawing and 895 recognising a flowchart, and MINIMAL spends none while
+   * getting both right. thinkingBudget is not an option, gemini-3.6-flash
+   * rejects it outright with 400.
+   */
+  thinking?: ThinkingLevel;
 }
 
 /** Codes worth retrying rather than surfacing. */
@@ -204,6 +215,7 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
       // so a budget sized only for the JSON truncates mid-object and the
       // response schema does not save you: you get valid-looking partial JSON.
       maxOutputTokens: 16384,
+      ...(args.thinking ? { thinkingConfig: { thinkingLevel: args.thinking } } : {}),
     },
     });
   } catch (error) {
@@ -314,6 +326,10 @@ export async function refineSketch(input: {
     // Low but not zero: at 0 the model repeats a bad reading of an ambiguous
     // sketch on every retry, so the user has no way to get a different answer.
     temperature: 0.2,
+    // The quality toggle now buys reasoning as well as a bigger model. Both
+    // fixtures, declining a drawing and recognising a flowchart, still come out
+    // right with no thinking at all, and that is the whole latency budget.
+    thinking: input.pro ? undefined : ThinkingLevel.MINIMAL,
   });
 }
 
@@ -329,5 +345,6 @@ export async function diagramFromPrompt(input: {
     model: input.pro ? env.geminiModelPro : env.geminiModel,
     fallbackModel: env.geminiModel,
     temperature: 0.4,
+    thinking: input.pro ? undefined : ThinkingLevel.MINIMAL,
   });
 }
