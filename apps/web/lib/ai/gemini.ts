@@ -93,6 +93,10 @@ export interface GenerateResult {
     outputTokens: number;
     droppedEdges: number;
     warnings: string[];
+    /** Gemini calls this result cost, retries and the fallback included. */
+    attempts: number;
+    /** True when `model` is the fallback, not the model the caller asked for. */
+    fellBack: boolean;
   };
 }
 
@@ -103,10 +107,52 @@ interface GenerateArgs {
   temperature: number;
   /** Used when `model` is refused for quota reasons. */
   fallbackModel?: string;
+  /**
+   * When the caller started, not when this attempt did.
+   *
+   * It lives in the args so that neither the retry recursion nor the
+   * pro-to-flash fallback can reset it. Timing from inside generate() measured
+   * the last attempt only, so a request that failed twice before succeeding was
+   * written to telemetry as though it had been fast, and every latency figure
+   * the project quotes understates real user-perceived latency by exactly the
+   * amount the retries hid.
+   */
+  started: number;
+}
+
+/** Counters that have to survive the recursion, unlike the args. */
+interface Progress {
+  /** Retries already spent against the current model. */
+  attempt: number;
+  /** Every generateContent call so far, across both models. */
+  calls: number;
+  fellBack: boolean;
 }
 
 /** Codes worth retrying rather than surfacing. */
 const TRANSIENT = new Set([429, 500, 502, 503, 504]);
+
+/**
+ * Ceiling on one call to generate(), retries and the fallback included.
+ *
+ * Both AI routes declare `maxDuration = 60`, and overrunning that is not a slow
+ * response: the platform kills the function with no body, so the user gets a
+ * bare network error instead of any of the messages this file works to produce.
+ * The 20s left over covers reading the request, the two Supabase round trips
+ * and the failure write.
+ */
+const CHAIN_BUDGET_MS = 40_000;
+
+/** Below this an attempt cannot realistically finish, so do not start one. */
+const MIN_ATTEMPT_MS = 3_000;
+
+/**
+ * Retries per model, on top of the first attempt.
+ *
+ * Was 3, which is four calls against a budget that fits three; the fourth only
+ * ever existed to blow the deadline.
+ */
+const MAX_RETRIES = 2;
 
 function statusOf(error: unknown): number {
   if (typeof error === "object" && error !== null) {
@@ -157,6 +203,8 @@ function isNetworkFault(error: unknown): boolean {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const remainingMs = (started: number) => CHAIN_BUDGET_MS - (Date.now() - started);
+
 /**
  * Distinguishes a per-minute 429 from a daily one.
  *
@@ -183,8 +231,23 @@ function quotaInfo(error: unknown): { daily: boolean; retryAfterS: number; limit
   };
 }
 
-async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult> {
-  const started = Date.now();
+async function generate(
+  args: GenerateArgs,
+  progress: Progress = { attempt: 0, calls: 0, fellBack: false },
+): Promise<GenerateResult> {
+  const budget = remainingMs(args.started);
+  if (budget < MIN_ATTEMPT_MS) {
+    throw new Error(
+      "Gemini did not answer in time. Try again, or select a smaller part of the board.",
+    );
+  }
+  const calls = progress.calls + 1;
+
+  // Held rather than inlined so the catch can ask the signal whether it fired.
+  // An aborted fetch is wrapped differently depending on how far the request
+  // got, and guessing at the error shape is how a spent deadline ends up being
+  // retried as though it were a flaky socket.
+  const deadline = AbortSignal.timeout(budget);
 
   let response;
   try {
@@ -204,24 +267,45 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
       // so a budget sized only for the JSON truncates mid-object and the
       // response schema does not save you: you get valid-looking partial JSON.
       maxOutputTokens: 16384,
+      // Per attempt, not per chain. A hung socket produces no status code and
+      // no error at all, so without this the request sits there until the
+      // platform kills the whole function and none of the handling below runs.
+      abortSignal: deadline,
     },
     });
   } catch (error) {
+    // Our own deadline, not anything Gemini said, so no status code applies.
+    // Retrying it is pointless: firing at all means the budget is spent.
+    if (deadline.aborted) {
+      throw new Error(
+        `Gemini did not answer within ${Math.round(budget / 1000)}s. Try again, ` +
+          `or select a smaller part of the board.`,
+      );
+    }
+
     const status = statusOf(error);
 
     // 503 means the model is momentarily oversubscribed, which happens often
     // enough on the newest models to be worth riding out rather than surfacing.
     // A socket reset gets the same treatment: it never reached the API at all.
     const daily = status === 429 && quotaInfo(error)?.daily;
-    if (!daily && (TRANSIENT.has(status) || isNetworkFault(error)) && attempt < 3) {
-      await wait(700 * 2 ** attempt);
-      return generate(args, attempt + 1);
+    const backoff = 700 * 2 ** progress.attempt;
+    if (
+      !daily &&
+      (TRANSIENT.has(status) || isNetworkFault(error)) &&
+      progress.attempt < MAX_RETRIES &&
+      // No point sleeping through the backoff only to start an attempt the
+      // deadline cuts off part way through.
+      remainingMs(args.started) > backoff + MIN_ATTEMPT_MS
+    ) {
+      await wait(backoff);
+      return generate(args, { ...progress, attempt: progress.attempt + 1, calls });
     }
 
     // 429 on the higher-quality model usually means it is not on the caller's
     // tier at all. Falling back beats failing the request outright.
     if (status === 429 && args.fallbackModel && args.model !== args.fallbackModel) {
-      return generate({ ...args, model: args.fallbackModel }, 0);
+      return generate({ ...args, model: args.fallbackModel }, { attempt: 0, calls, fellBack: true });
     }
 
     if (status === 429) {
@@ -249,6 +333,33 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
     throw error;
   }
 
+  // The dangerous failure. maxOutputTokens is generous but a large sketch still
+  // runs past it, and the response schema does not save you: the truncated JSON
+  // parses, parseDiagram accepts the short node list, and the compiler then
+  // tombstones every source element those few nodes happened to name while the
+  // rest of the board is dropped. Silent partial data loss, recorded as
+  // ok: true. Refuse before any of that can run.
+  const finish: string | undefined = response.candidates?.[0]?.finishReason;
+  if (finish && finish !== "STOP") {
+    throw new Error(
+      finish === "MAX_TOKENS"
+        ? "The sketch was too large to redraw in one pass. Select part of it and try again."
+        : `Gemini stopped early (${finish}), so the diagram would be incomplete.`,
+    );
+  }
+
+  // A prompt-level block returns no candidates at all, so it fell through to
+  // the empty branch below and reported itself as "Gemini returned an empty
+  // response". Naming the block is the difference between "try again" and
+  // "retrying this will never work".
+  const blocked = response.promptFeedback?.blockReason;
+  if (blocked) {
+    throw new Error(
+      `Gemini refused this request (${blocked}). Rephrase the instruction, or remove ` +
+        `the part of the sketch it is reacting to.`,
+    );
+  }
+
   const text = response.text;
   if (!text) throw new Error("Gemini returned an empty response");
 
@@ -266,11 +377,13 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
     diagram,
     meta: {
       model: args.model,
-      latencyMs: Date.now() - started,
+      latencyMs: Date.now() - args.started,
       promptTokens: usage?.promptTokenCount ?? 0,
       outputTokens: usage?.candidatesTokenCount ?? 0,
       droppedEdges: dropped.edges,
       warnings: dropped.reason.slice(0, 5),
+      attempts: calls,
+      fellBack: progress.fellBack,
     },
   };
 }
@@ -307,6 +420,7 @@ export async function refineSketch(input: {
   ];
 
   return generate({
+    started: Date.now(),
     system: REFINE_SYSTEM,
     parts,
     model: input.pro ? env.geminiModelPro : env.geminiModel,
@@ -324,6 +438,7 @@ export async function diagramFromPrompt(input: {
 }): Promise<GenerateResult> {
   const env = serverEnv();
   return generate({
+    started: Date.now(),
     system: PROMPT_SYSTEM,
     parts: [{ text: input.prompt }],
     model: input.pro ? env.geminiModelPro : env.geminiModel,
