@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
-import type { BoardRole } from "@/lib/supabase/types";
+import type { BoardRole, BoardVisibility } from "@/lib/supabase/types";
 
 /**
  * Board lifecycle and sharing.
@@ -115,6 +115,37 @@ export async function setLinkRole(boardId: string, role: BoardRole) {
   if (error) throw new Error(error.message);
 
   revalidatePath(`/board/${boardId}`);
+}
+
+/**
+ * Turns link sharing on or off.
+ *
+ * boards.visibility has defaulted to 'link' since the schema was written and no
+ * code path ever wrote it, so every board was link-shared from creation with no
+ * way to stop that. "Reset the link" only minted a new working link, which is
+ * not the same as revoking. 'public' has been a working read-only mode in
+ * can_read_board the whole time and was simply unreachable.
+ *
+ * The boards_guard_sharing trigger already rejects this from anyone but the
+ * owner, so the check here is a convenience, not the enforcement point.
+ */
+export async function setVisibility(
+  boardId: string,
+  visibility: BoardVisibility,
+) {
+  if (!["private", "link", "public"].includes(visibility)) {
+    throw new Error("invalid visibility");
+  }
+  const { supabase } = await requireUser(`/board/${boardId}`);
+
+  const { error } = await supabase
+    .from("boards")
+    .update({ visibility })
+    .eq("id", boardId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/board/${boardId}`);
+  revalidatePath("/dashboard");
 }
 
 /** Invalidates the old link. Anyone already admitted keeps their access. */

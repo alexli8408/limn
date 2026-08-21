@@ -147,6 +147,7 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
         shareUrl={shareUrl}
         ownerId={board.owner_id}
         linkRole={board.link_role}
+        visibility={board.visibility}
       />
     </main>
   );

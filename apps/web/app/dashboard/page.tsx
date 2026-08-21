@@ -115,6 +115,7 @@ interface BoardSummary {
   title: string;
   element_count: number;
   updated_at: string;
+  visibility: "private" | "link" | "public";
 }
 
 function Section({
@@ -145,6 +146,10 @@ function Section({
               <span className="mt-1.5 block font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
                 {board.element_count} elements ·{" "}
                 {new Date(board.updated_at).toLocaleDateString()}
+                {/* The column was already being selected and thrown away, so a
+                    board you had deliberately made private looked identical to
+                    one anyone with the link could open. */}
+                {board.visibility !== "link" && ` · ${board.visibility}`}
               </span>
             </Link>
 

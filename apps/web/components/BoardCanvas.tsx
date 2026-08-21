@@ -42,6 +42,7 @@ export interface BoardCanvasProps {
   shareUrl: string;
   ownerId: string;
   linkRole: Role;
+  visibility: "private" | "link" | "public";
 }
 
 /** Stable empty set, so getHeldIds does not allocate on every remote frame. */
@@ -556,6 +557,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           boardId={props.boardId}
           shareUrl={props.shareUrl}
           linkRole={props.linkRole}
+          visibility={props.visibility}
           isOwner={props.userId === props.ownerId}
           ownerId={props.ownerId}
           onClose={() => setSharing(false)}

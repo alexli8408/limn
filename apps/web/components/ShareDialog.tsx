@@ -1,15 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import type { BoardRole } from "@/lib/supabase/types";
+import type { BoardRole, BoardVisibility } from "@/lib/supabase/types";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { removeCollaborator, rotateShareLink, setLinkRole } from "@/app/actions";
+import {
+  removeCollaborator,
+  rotateShareLink,
+  setLinkRole,
+  setVisibility,
+} from "@/app/actions";
 
 interface Props {
   boardId: string;
   shareUrl: string;
   /** What the link currently grants. Only the owner can change it. */
   linkRole: BoardRole;
+  /** Whether the link works at all. Only the owner can change it. */
+  visibility: BoardVisibility;
   isOwner: boolean;
   ownerId: string;
   onClose: () => void;
@@ -25,6 +32,7 @@ interface Collaborator {
 export default function ShareDialog(props: Props) {
   const [url, setUrl] = useState(props.shareUrl);
   const [role, setRole] = useState<BoardRole>(props.linkRole);
+  const [visible, setVisible] = useState<BoardVisibility>(props.visibility);
   const [copied, setCopied] = useState(false);
   const [people, setPeople] = useState<Collaborator[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +144,18 @@ export default function ShareDialog(props: Props) {
     });
   };
 
+  const changeVisibility = (next: BoardVisibility) => {
+    setVisible(next);
+    startTransition(async () => {
+      try {
+        await setVisibility(props.boardId, next);
+      } catch (e) {
+        setVisible(props.visibility);
+        setError(e instanceof Error ? e.message : "could not change who can open this");
+      }
+    });
+  };
+
   const rotate = () => {
     startTransition(async () => {
       try {
@@ -195,8 +215,11 @@ export default function ShareDialog(props: Props) {
         <div className="space-y-4 p-4">
           <div>
             <p className="mb-2 text-xs leading-relaxed text-[var(--ink-dim)]">
-              Anyone with this link can sign in and join. They appear on the
-              canvas live, and the board shows up in their boards list.
+              {visible === "private"
+                ? "Sharing is off. Only people already on the list below can open this board, and this link will not let anyone in."
+                : visible === "public"
+                  ? "Anyone with this link can open the board read-only, without signing in."
+                  : "Anyone with this link can sign in and join. They appear on the canvas live, and the board shows up in their boards list."}
             </p>
             <div className="flex gap-2">
               <input
@@ -209,7 +232,8 @@ export default function ShareDialog(props: Props) {
               <button
                 type="button"
                 onClick={copy}
-                className="shrink-0 rounded-sm bg-[var(--ink-accent)] px-3 py-2 text-xs font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)]"
+                disabled={visible === "private"}
+                className="shrink-0 rounded-sm bg-[var(--ink-accent)] px-3 py-2 text-xs font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)] disabled:cursor-not-allowed disabled:bg-[var(--ink-raised)] disabled:text-[var(--ink-faint)]"
               >
                 {copied ? "Copied" : "Copy"}
               </button>
@@ -217,6 +241,37 @@ export default function ShareDialog(props: Props) {
           </div>
 
           {props.isOwner && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                Who can open
+              </span>
+              <div className="flex overflow-hidden rounded-sm border border-[var(--ink-line)]">
+                {(
+                  [
+                    ["private", "Invited only"],
+                    ["link", "Anyone with link"],
+                    ["public", "Public"],
+                  ] as [BoardVisibility, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => changeVisibility(value)}
+                    className={`px-2.5 py-1.5 text-xs transition disabled:opacity-50 ${
+                      visible === value
+                        ? "bg-[var(--ink-accent)] font-semibold text-[#0b0813]"
+                        : "text-[var(--ink-faint)] hover:text-[var(--ink-dim)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {props.isOwner && visible !== "private" && (
             <div className="flex items-center justify-between gap-3">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
                 Link grants
