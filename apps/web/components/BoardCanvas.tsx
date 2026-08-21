@@ -72,6 +72,8 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   // Guards re-entry: applying a remote update triggers onChange, which would
   // otherwise be published straight back out as a local edit.
   const applyingRemote = useRef(false);
+  /** Aborts the AI request in flight, so Cancel actually stops the wait. */
+  const aiAbort = useRef<AbortController | null>(null);
   const lastLocalVersion = useRef(-1);
 
   const onRemoteScene = useCallback(
@@ -186,7 +188,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         return;
       }
 
-      setAiRun({ state: "running", message: "Reading your sketch…" });
+      aiAbort.current?.abort();
+      const controller = new AbortController();
+      aiAbort.current = controller;
+      setAiRun({ state: "running", message: "Reading your sketch…", startedAt: Date.now() });
       collab.announceAi("start", "refine", props.displayName);
 
       try {
@@ -212,6 +217,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             mode: "refine",
             quality: quality ?? "fast",
           }),
+          signal: controller.signal,
         });
 
         const payload = (await response.json()) as
@@ -276,10 +282,14 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         });
         collab.announceAi("done", "refine", props.displayName);
       } catch (error) {
-        setAiRun({
-          state: "error",
-          message: error instanceof Error ? error.message : "generation failed",
-        });
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setAiRun(null);
+        } else {
+          setAiRun({
+            state: "error",
+            message: error instanceof Error ? error.message : "generation failed",
+          });
+        }
         collab.announceAi("error", "refine", props.displayName);
       }
     },
@@ -289,7 +299,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const runPromptAi = useCallback(
     async (prompt: string, quality?: "fast" | "high") => {
       if (!api || readOnly) return;
-      setAiRun({ state: "running", message: "Composing a diagram…" });
+      aiAbort.current?.abort();
+      const controller = new AbortController();
+      aiAbort.current = controller;
+      setAiRun({ state: "running", message: "Composing a diagram…", startedAt: Date.now() });
       collab.announceAi("start", "prompt", props.displayName);
 
       try {
@@ -301,6 +314,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             prompt,
             quality: quality ?? "fast",
           }),
+          signal: controller.signal,
         });
         const payload = (await response.json()) as
           | { diagram: LimnDiagram; meta: Record<string, unknown> }
@@ -340,10 +354,14 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         });
         collab.announceAi("done", "prompt", props.displayName);
       } catch (error) {
-        setAiRun({
-          state: "error",
-          message: error instanceof Error ? error.message : "generation failed",
-        });
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setAiRun(null);
+        } else {
+          setAiRun({
+            state: "error",
+            message: error instanceof Error ? error.message : "generation failed",
+          });
+        }
         collab.announceAi("error", "prompt", props.displayName);
       }
     },
@@ -353,9 +371,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const runVectorize = useCallback(
     async (file: File) => {
       if (!api || readOnly) return;
+      aiAbort.current?.abort();
+      const controller = new AbortController();
+      aiAbort.current = controller;
       setAiRun({
         state: "running",
         message: "Tracing the photo… (a sleeping vision instance can take ~50s)",
+        startedAt: Date.now(),
       });
 
       try {
@@ -364,6 +386,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ boardId: props.boardId, image }),
+          signal: controller.signal,
         });
         const payload = (await response.json()) as
           | { shapes: VisionShape[]; traced_strokes: number; latency_ms: number; deskewed: boolean }
@@ -398,10 +421,14 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           },
         });
       } catch (error) {
-        setAiRun({
-          state: "error",
-          message: error instanceof Error ? error.message : "vectorize failed",
-        });
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setAiRun(null);
+        } else {
+          setAiRun({
+            state: "error",
+            message: error instanceof Error ? error.message : "vectorize failed",
+          });
+        }
       }
     },
     [api, readOnly, props.boardId, commit],
@@ -427,7 +454,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   );
 
   return (
-    <div className="relative flex h-full w-full flex-col">
+    <div className="relative flex h-dvh w-full flex-col">
       <PresenceBar
         title={title}
         status={collab.status}
@@ -498,6 +525,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           <AiPanel
             run={aiRun}
             onDismiss={() => setAiRun(null)}
+            onCancel={() => {
+              aiAbort.current?.abort();
+              setAiRun(null);
+            }}
             onBeautify={runBeautifyAi}
             onPrompt={runPromptAi}
             onVectorize={runVectorize}
