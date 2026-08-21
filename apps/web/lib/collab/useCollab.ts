@@ -226,12 +226,36 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const isWriterRef = useRef(isWriter);
   isWriterRef.current = isWriter;
 
+  /**
+   * Frozen at mount, and the name is the reason: it is where this session
+   * started, not a value that should keep arriving.
+   *
+   * It used to be read live, which made it a dependency of the snapshot writer
+   * memo, which is a dependency of applyRemote, which is a dependency of the
+   * channel effect. So a change to it tore down the Realtime channel and joined
+   * again. The page is force-dynamic and re-reads the snapshot version on every
+   * render, and every autosave bumps that version, so any server action calling
+   * revalidatePath on this route, which the share dialog and rename both do,
+   * handed back a payload with a new number and dropped the socket.
+   *
+   * The rejoin is not free. While this peer is out of presence the others
+   * re-elect a writer, and a stroke broadcast into the gap is already recorded
+   * in the sender's sentVersions, so it is never offered again and is missing
+   * from the snapshot the writer goes on to persist. Changing the share role
+   * could cost a peer the line they were drawing at the time.
+   *
+   * The writer tracks its own version after the first save anyway, so a fresh
+   * baseVersion mid-session is not a correction, it is a reset of the
+   * compare-and-swap base to a number this session has already moved past.
+   */
+  const baseVersion = useRef(initialVersion).current;
+
   const snapshots = useMemo(
     () =>
       createSnapshotWriter({
         supabase,
         boardId,
-        baseVersion: initialVersion,
+        baseVersion,
         onSaved: (version, at) => {
           setSavedVersion(version);
           setLastSavedAt(at);
@@ -255,7 +279,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
           });
         },
       }),
-    [supabase, boardId, initialVersion, peerId],
+    [supabase, boardId, baseVersion, peerId],
   );
 
   /* ---------------------------------------------------------------- */
