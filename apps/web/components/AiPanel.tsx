@@ -266,7 +266,8 @@ export default function AiPanel(props: Props) {
           <>
             <p className="text-xs leading-relaxed text-[var(--ink-dim)]">
               Photograph a physical whiteboard. OpenCV corrects the perspective,
-              traces the ink and fits real shapes you can edit.
+              traces the ink into shapes you can edit, and the writing on it is
+              read back as text.
             </p>
             <input
               ref={fileInput}

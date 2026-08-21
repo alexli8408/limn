@@ -477,7 +477,14 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           signal: controller.signal,
         });
         const payload = (await response.json()) as
-          | { shapes: VisionShape[]; traced_strokes: number; latency_ms: number; deskewed: boolean }
+          | {
+              shapes: VisionShape[];
+              traced_strokes: number;
+              latency_ms: number;
+              deskewed: boolean;
+              source_width: number;
+              source_height: number;
+            }
           | { error: string };
         if (!response.ok || "error" in payload) {
           throw new Error("error" in payload ? payload.error : "vectorize failed");
@@ -492,14 +499,27 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         const elements = shapesToElements(payload.shapes, origin);
         if (elements.length === 0) throw new Error("no strokes found in that image");
 
-        commit([...all, ...elements], true);
-        api.scrollToContent(elements as never, { fitToContent: true });
+        // The tracer sees ink, not language, so a photographed board came back
+        // as unlabelled boxes and every word on it was lost. Reading the same
+        // photo recovers them.
+        //
+        // Deliberately after the trace and deliberately not awaited into the
+        // failure path: text is a bonus, and a board that traced correctly
+        // should not be reported as a failure because the reading step was rate
+        // limited or refused.
+        const words = await readPhotoText(props.boardId, image, controller.signal);
+        const labels = words.length
+          ? textToElements(words, origin, payload.source_width, payload.source_height)
+          : [];
+
+        commit([...all, ...elements, ...labels], true);
+        api.scrollToContent([...elements, ...labels] as never, { fitToContent: true });
 
         setAiRun({
           state: "done",
           message: `Traced ${payload.traced_strokes} strokes${
-            payload.deskewed ? " (perspective corrected)" : ""
-          }.`,
+            labels.length ? ` and read ${labels.length} labels` : ""
+          }${payload.deskewed ? " (perspective corrected)" : ""}.`,
           stats: {
             nodes: payload.shapes.filter((s) => s.kind !== "freedraw").length,
             edges: 0,
@@ -645,6 +665,69 @@ export default function BoardCanvas(props: BoardCanvasProps) {
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
+
+interface OcrWord {
+  text: string;
+  box: { x: number; y: number; width: number; height: number };
+  confidence: number;
+}
+
+/**
+ * Reads the words off a photographed board.
+ *
+ * Never throws. The trace has already succeeded by the time this runs, and
+ * losing the labels is a smaller loss than telling someone their photo failed
+ * when a board full of shapes is sitting on their canvas.
+ */
+async function readPhotoText(
+  boardId: string,
+  image: string,
+  signal: AbortSignal,
+): Promise<OcrWord[]> {
+  try {
+    const response = await fetch("/api/ai/ocr", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ boardId, image }),
+      signal,
+    });
+    if (!response.ok) return [];
+    const payload = (await response.json()) as { text?: OcrWord[] };
+    // A low-confidence read is a guess at handwriting, and a wrong word placed
+    // confidently on the canvas is worse than no word.
+    return (payload.text ?? []).filter((item) => item.confidence >= 0.5);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Places read words into the same space the traced shapes landed in.
+ *
+ * The boxes arrive normalised to the photo, and the tracer reports the pixel
+ * dimensions it worked in, so the two multiply together. This is approximate
+ * when the tracer deskewed the image, because the words were read from the
+ * original and the shapes come from the flattened one; the alternative is
+ * throwing every label away, and a label a few pixels out can be dragged.
+ */
+function textToElements(
+  words: readonly OcrWord[],
+  origin: { x: number; y: number },
+  sourceWidth: number,
+  sourceHeight: number,
+): SyncElement[] {
+  const skeletons = words.map((word) => ({
+    type: "text",
+    x: origin.x + word.box.x * sourceWidth,
+    y: origin.y + word.box.y * sourceHeight,
+    text: word.text,
+    // From the box the model drew round it, so a heading stays bigger than a
+    // note. Floored because Excalidraw renders anything under ~8px unreadably.
+    fontSize: Math.max(12, Math.round(word.box.height * sourceHeight * 0.8)),
+    strokeColor: "#1e1e1e",
+  }));
+  return convertToExcalidrawElements(skeletons as never) as unknown as SyncElement[];
+}
 
 interface VisionShape {
   kind: string;
