@@ -6,8 +6,22 @@ import { signOut } from "@/app/auth/actions";
 import PendingButton from "@/components/PendingButton";
 import BoardCardActions from "@/components/BoardCardActions";
 import BoardTitle from "@/components/BoardTitle";
+import { publicEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Builds the CDN URL for a stored thumbnail path.
+ *
+ * The column holds a path inside the bucket, never a URL. It is written by the
+ * browser and nothing in the database constrains where a URL would point, so an
+ * origin taken from it would be an origin chosen by whoever last had an editor
+ * link to the board. This one comes from the app's own configuration; the
+ * database only has to guarantee that a board points inside its own folder,
+ * which is what boards_guard_thumbnail does.
+ */
+const thumbnailSrc = (path: string): string =>
+  `${publicEnv.supabaseUrl}/storage/v1/object/public/board-thumbnails/${path}`;
 
 export default async function DashboardPage() {
   const supabase = await supabaseServer();
@@ -151,7 +165,7 @@ function Section({
                 {board.thumbnail_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={board.thumbnail_url}
+                    src={thumbnailSrc(board.thumbnail_url)}
                     alt=""
                     loading="lazy"
                     className="h-full w-full object-cover opacity-90 transition group-hover:opacity-100"

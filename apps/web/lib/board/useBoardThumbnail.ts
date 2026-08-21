@@ -72,13 +72,25 @@ export function useBoardThumbnail({ boardId, api, isWriter, savedVersion }: Opti
           .upload(path, blob, { upsert: true, contentType: "image/png" });
         if (uploadError) throw uploadError;
 
-        const { data } = supabase.storage.from("board-thumbnails").getPublicUrl(path);
-        // Cache-busted on the version. The object path never changes and the
-        // bucket is public, so without this the CDN would serve the first
-        // thumbnail a board ever had for as long as it existed.
+        /**
+         * The path, not the public URL.
+         *
+         * Nothing constrains what a client may write to this column: boards has
+         * a table-wide update grant, boards_update only asks whether you can
+         * edit, and the sharing guard does not cover it. Storing a full URL
+         * therefore let anyone holding an editor share link, which is what
+         * every board hands out by default, aim the owner's dashboard at a host
+         * of their choosing. Storing a path leaves the origin to the
+         * application's own configuration, and the database checks the rest:
+         * a board may only point inside its own folder.
+         *
+         * Cache-busted on the version. The path never changes and the bucket is
+         * public, so without this the CDN would serve the first thumbnail a
+         * board ever had for as long as it existed.
+         */
         await supabase
           .from("boards")
-          .update({ thumbnail_url: `${data.publicUrl}?v=${savedVersion}` })
+          .update({ thumbnail_url: `${path}?v=${savedVersion}` })
           .eq("id", boardId);
       } catch (error) {
         // Never surfaced. A missing thumbnail is a cosmetic gap on another page,

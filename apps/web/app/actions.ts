@@ -76,6 +76,23 @@ export async function autoTitleBoard(boardId: string, title: string) {
 
 export async function deleteBoard(boardId: string) {
   const { supabase } = await requireUser("/dashboard");
+
+  /**
+   * The thumbnail first, and it has to be first.
+   *
+   * board-thumbnails is public, so the object stays readable on the CDN by
+   * anyone who has ever seen the board's id until something removes it, and
+   * nothing did. It cannot be cleaned up afterwards either: the delete policy
+   * asks can_edit_board, which needs the board row that is about to go.
+   *
+   * Best effort. A board the owner asked to delete should be deleted whether or
+   * not the picture of it could be tidied away first.
+   */
+  const { error: thumbError } = await supabase.storage
+    .from("board-thumbnails")
+    .remove([`${boardId}/thumb.png`]);
+  if (thumbError) console.warn("[limn] thumbnail not removed:", thumbError.message);
+
   const { error } = await supabase.from("boards").delete().eq("id", boardId);
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard");

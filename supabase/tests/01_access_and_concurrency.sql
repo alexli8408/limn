@@ -143,6 +143,25 @@ exception when others then
   raise notice 'correctly blocked: %', sqlerrm;
 end $$;
 
+-- thumbnail_url is written by the browser and rendered by the owner's dashboard
+-- as an <img>. Nothing else constrains it: the sharing guard does not cover the
+-- column and boards carries a table-wide update grant, so without this an editor
+-- could aim someone else's browser wherever they liked.
+\echo '--- and must NOT be able to point the thumbnail at another board'
+do $$
+begin
+  update public.boards
+     set thumbnail_url = '99999999-9999-9999-9999-999999999999/thumb.png';
+  raise notice 'UNEXPECTED: thumbnail path escaped the board folder';
+exception when others then
+  raise notice 'correctly blocked: %', sqlerrm;
+end $$;
+
+\echo '--- but its own folder is fine (expect t)'
+update public.boards set thumbnail_url = :'board_id' || '/thumb.png?v=3';
+select thumbnail_url = :'board_id' || '/thumb.png?v=3' as own_thumbnail_accepted
+from public.boards where id = :'board_id'::uuid;
+
 \echo '--- the real owner still owns it (expect owner_id unchanged, editor role)'
 select owner_id = '11111111-1111-1111-1111-111111111111'::uuid as owner_intact
 from public.boards where id = :'board_id'::uuid;
