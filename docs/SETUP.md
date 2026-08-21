@@ -92,7 +92,7 @@ because TCP completes against the local proxy.
 reachable over IPv4. `supabase link` already cached the pooler URL; the script
 just supplies the password. Use it for every later migration too.
 
-It should apply ten migrations in order:
+It should apply thirteen migrations in order:
 
 ```
 20260814000100_schema.sql             tables, triggers, revision pruning
@@ -105,6 +105,9 @@ It should apply ten migrations in order:
 20260814000800_illustrate_mode.sql    an enum label kept for compatibility
 20260821000100_generation_attempts.sql  retry count and model actually used
 20260821000200_thumbnail_policies.sql   re-creates the thumbnail bucket policies
+20260821000300_fix_ownership_guard.sql  an editor could take a board off its owner
+20260821000400_narrow_thumbnail_read.sql scopes thumbnail reads to can_read_board
+20260821000500_thumbnail_path.sql       thumbnail_url holds a path, not a URL
 ```
 
 The last one exists because the `board-thumbnails` policies written in
@@ -305,9 +308,11 @@ different subsystem, so a failure tells you which one.
 6. **Wait ~5 seconds, reload.** → your drawing is still there, header shows a
    bumped `v` number.
    *Exercises: writer election and the snapshot compare-and-swap.*
-7. **Draw a few boxes and arrows, then Beautify → "Keep my layout."**
+7. **Draw a few boxes and arrows, then hit the violet "✦ Clean up" button at
+   the bottom right and, on the "Clean up" tab, the "Clean up" button.**
    *Exercises: Gemini, constrained decoding, the compiler.*
-8. **Beautify → "From photo"**, upload any photo of a whiteboard or a
+8. **"✦ Clean up" → the "From photo" tab → "Choose a photo"**, and pick a
+   photo of a whiteboard or a
    pen-and-paper sketch. → shapes land as editable elements, and any handwriting
    on them comes back as text sitting where it was written.
    *Exercises: the OpenCV pipeline end to end, and the Gemini transcription pass
@@ -382,7 +387,7 @@ Save (the service restarts automatically).
 This is the easiest step to forget. Skip it and photo vectorisation fails in
 production with a browser CORS error that looks like the service being down.
 
-> **Check:** on the deployed site, Beautify → From photo works.
+> **Check:** on the deployed site, "✦ Clean up" → From photo works.
 
 ---
 
@@ -438,12 +443,36 @@ full thing. It prints its projected message count first and refuses runs over
 
 ```bash
 pnpm dev                  # web :3000 + vision :8000
-pnpm test                 # all 52 tests across TS, Python, SQL
+pnpm build:packages       # ALWAYS before pnpm test, see below
+pnpm test                 # 76 tests, or 80 with a GEMINI_API_KEY in .env
 pnpm build                # production build
 pnpm loadtest             # realtime benchmark
 PGUSER=$(whoami) ./supabase/tests/run.sh    # security assertions
-supabase db push          # apply new migrations
+./scripts/db.sh push      # apply new migrations (see 2b, plain db push needs IPv6)
 ```
+
+**`pnpm test` never builds.** `packages/protocol` and `packages/shapes` both run
+`node --test dist/*.test.js` with no pretest hook, and `apps/web` resolves
+`@limn/shapes` to `dist/` too. Edit a source file, run the suite, and you are
+grading the previous build: it goes green and means nothing. Run
+`pnpm build:packages && pnpm test`.
+
+**`pnpm test` calls the real Gemini API.** `lib/ai/live-test.ts` reads the
+repo-root `.env`, not `apps/web/.env.local`, so a key there makes four
+integration tests hit the network and spend free-tier quota (20/day per model).
+A spent quota still reports green: the helper catches `RESOURCE_EXHAUSTED`,
+prints `skipped:` to stderr, and the test passes. For the offline 35, run from
+`apps/web`:
+
+```bash
+pnpm exec vitest run --exclude '**/*.integration.test.ts' --exclude '**/node_modules/**'
+```
+
+Repeat the second `--exclude`: passing one on the CLI replaces vitest's
+defaults, so without it `node_modules` gets scanned. Setting `GEMINI_API_KEY=`
+empty does not work, because `loadEnv` treats an empty string as unset and
+writes the key back from `.env`.
+
 
 ---
 
@@ -457,9 +486,9 @@ supabase db push          # apply new migrations
 | Subscribe fails with a policy error | `...000300_rls.sql` didn't apply; re-run `db push` |
 | Second window shows no cursor | Check both are the *same* board id; a share link without `?t=` grants nothing |
 | Snapping never fires | Only freehand (pencil) strokes are recognised. The rectangle *tool* is already a rectangle |
-| Beautify returns 502 | `GEMINI_API_KEY` missing or rate-limited |
+| Clean up returns 502 | `GEMINI_API_KEY` missing or rate-limited |
 | Dashboard tiles are all blank | `...000200_thumbnail_policies.sql` has not been pushed, so the upload is refused by RLS |
-| Photo trace returns shapes but no words | Handwriting is transcribed by Gemini, not OpenCV, so this is the same `GEMINI_API_KEY` as Beautify |
+| Photo trace returns shapes but no words | Handwriting is transcribed by Gemini, not OpenCV, so this is the same `GEMINI_API_KEY` as Clean up |
 | Photo trace times out | Cold Render instance; first request after a sleep pays ~50s |
 | Photo trace fails only in production | `ALLOWED_ORIGINS` (Phase 8) |
 | Build fails mentioning `serverEnv()` | Something imported it from a client component, which is the guard working |
