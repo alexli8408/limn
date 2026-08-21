@@ -53,8 +53,8 @@ with the command beside it.
 | Stroke recognition accuracy | **95.8%** over 600 synthetic strokes (5 primitives, a third of them rotated, with hand-tremor and closing-overshoot artefacts) | `pnpm --filter @limn/shapes test` |
 | Photo to diagram | **4/4** drawn primitives recovered with correct dimensions from a synthesised photo (perspective warp, illumination gradient, glare hotspot, sensor noise), in **~57 ms** | `cd apps/vision && pytest tests -q` |
 | Merge convergence | 5 simulated peers over 40 rounds of randomised delivery order, batching and replays. **No divergence**, no duplicates, no holes | `pnpm --filter @limn/protocol test` |
-| Access control | 19 checks on RLS, share-link redemption, revision sampling and snapshot compare-and-swap, against real Postgres | `./supabase/tests/run.sh` |
-| Test suites | **74 tests** across TypeScript and Python, plus the SQL checks above | `pnpm test` |
+| Access control | 23 checks on RLS, privilege escalation, share-link redemption and snapshot compare-and-swap, against real Postgres | `./supabase/tests/run.sh` |
+| Test suites | **76 tests** across TypeScript and Python, plus the SQL checks above | `pnpm test` |
 
 Realtime throughput and latency depend on your own Supabase project, so they are
 not quoted here. Measure yours:
