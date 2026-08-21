@@ -1,0 +1,55 @@
+# Keeps the free tiers from going to sleep.
+#
+# Two different clocks, and the UptimeRobot monitor only ever covered one of
+# them. Render sleeps a free instance after about 15 minutes idle and pays a
+# ~50 second cold start on the next request. Supabase pauses a free project
+# after 7 days with no API requests, and coming back from that is a manual
+# click in the dashboard, so a link handed to someone lands on a dead app.
+#
+# Pinging the vision service does nothing for Supabase: they are separate
+# services with separate timers. This was measured rather than assumed. With
+# only the Render monitor running, the landing page's stats cache aged
+# 366s -> 670s -> 974s across ten minutes, climbing exactly in step with the
+# clock, which means nothing was reaching the web app at all.
+#
+# Hitting the landing page is what covers Supabase, because it calls the
+# platform_stats() RPC on render and that counts as an API request.
+#
+# Note for future readers: GitHub disables scheduled workflows on a repository
+# with no pushes for 60 days, and emails first. If this repo goes quiet for
+# that long, re-enable it from the Actions tab or the pause comes back.
+
+name: keepalive
+
+on:
+  schedule:
+    # Twice a day is far more often than the 7 day pause needs, and cheap: this
+    # is a public repository, so Actions minutes are free. Deliberately not
+    # every few minutes, which would be pointless traffic against a quota.
+    - cron: "17 6,18 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Web app, which reaches Supabase through platform_stats()
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 \
+            --retry 3 --retry-delay 10 --retry-all-errors \
+            https://limn.axli.me/)
+          echo "limn.axli.me -> $code"
+          # Any 2xx or 3xx means the page rendered and the RPC ran. A 5xx is a
+          # real outage worth failing on; the point of this job is to notice.
+          [ "$code" -lt 400 ] || exit 1
+
+      - name: Vision service, which Render otherwise sleeps
+        run: |
+          # Generous timeout on purpose: if the instance did fall asleep, this
+          # request is the one paying the cold start.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 120 \
+            --retry 3 --retry-delay 15 --retry-all-errors \
+            https://limn-vision.onrender.com/health)
+          echo "limn-vision -> $code"
+          [ "$code" -lt 400 ] || exit 1
