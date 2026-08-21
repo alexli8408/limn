@@ -26,7 +26,13 @@ export const sketchKinds = ["diagram", "drawing", "empty"] as const;
 
 export const nodeShapes = ["rectangle", "ellipse", "diamond"] as const;
 export const emphases = ["normal", "accent", "muted", "success", "danger"] as const;
-export const layouts = ["preserve", "layered-tb", "layered-lr", "grid"] as const;
+/**
+ * No "grid": the layout engine only knows a flow direction, so plan.ts maps
+ * everything that is not layered-lr onto a top-to-bottom Sugiyama pass. Offering
+ * the value meant a sketch the model correctly read as a grid came back as a
+ * column, which is worse than never having been offered the choice.
+ */
+export const layouts = ["preserve", "layered-tb", "layered-lr"] as const;
 
 export const diagramNodeSchema = z.object({
   /** Referenced by edges. The model invents these; they never reach the scene. */
@@ -40,8 +46,6 @@ export const diagramNodeSchema = z.object({
    * the user drew it, not where a layout algorithm would prefer.
    */
   sourceIds: z.array(z.string().max(128)).max(64).default([]),
-  /** Optional layout hint, honoured only when the model asks to recompose. */
-  rank: z.number().int().min(0).max(64).optional(),
 });
 
 export const diagramEdgeSchema = z.object({
@@ -54,7 +58,10 @@ export const diagramEdgeSchema = z.object({
 });
 
 export const diagramSchema = z.object({
-  kind: z.enum(sketchKinds).default("diagram"),
+  // Defaults to "drawing" so a missing kind fails closed. Defaulting to
+  // "diagram" meant a truncated or malformed response was converted anyway, and
+  // conversion tombstones the sketch it replaced.
+  kind: z.enum(sketchKinds).default("drawing"),
   title: z.string().max(120).default(""),
   layout: z.enum(layouts).default("preserve"),
   nodes: z.array(diagramNodeSchema).max(120).default([]),
@@ -116,12 +123,17 @@ export const geminiDiagramSchema = {
           shape: {
             type: "string",
             enum: [...nodeShapes],
+            // Same wording as REFINE_SYSTEM in gemini.ts. The response schema is read
+            // at decode time, so an "actor" offered here outranks a system prompt that
+            // bans it, and that is the sentence the stick-figure regression came from.
             description:
               // "actor" is deliberately gone. It invited the model to read a
               // drawn person as a node, which is exactly how a stick figure
               // came back as an ellipse labelled "actor". Nothing here should
-              // suggest that a picture of something is a diagram element.
-              "rectangle for a step or entity, diamond for a decision, ellipse for a start or end point.",
+              // suggest that a picture of something is a diagram element. The
+              // wording matches REFINE_SYSTEM so the schema and the prompt
+              // cannot disagree about what an ellipse means.
+              "rectangle for a step or entity, diamond for a decision. Use an ellipse for a start or end point.",
           },
           emphasis: {
             type: "string",
@@ -170,7 +182,8 @@ export const geminiDiagramSchema = {
     },
     rationale: {
       type: "string",
-      description: "One sentence on what you changed and why.",
+      description:
+        "One sentence on what you changed and why, or if you declined, what you saw instead.",
     },
   },
   required: ["kind", "layout", "nodes", "edges", "rationale"],
@@ -222,16 +235,32 @@ export function parseDiagram(raw: unknown): {
 
   // Collapse duplicate edges; the model often restates a relationship it already
   // emitted when the sketch draws it twice.
-  const seen = new Set<string>();
-  const unique = edges.filter((edge) => {
-    const key = `${edge.from}->${edge.to}:${edge.label}`;
-    if (seen.has(key)) {
-      reason.push(`duplicate edge ${edge.from}->${edge.to}`);
-      return false;
+  //
+  // Keyed on the pair alone, not the pair plus label. Two edges between the same
+  // nodes compile to two arrows on identical coordinates, so a decision diamond
+  // whose "yes" and "no" branches both return to one node drew both labels on
+  // top of each other and neither was readable. Merging the labels keeps both
+  // readings on the single arrow that actually gets drawn.
+  const merged = new Map<string, DiagramEdge>();
+  const labels = new Map<string, string[]>();
+  for (const edge of edges) {
+    const key = `${edge.from}->${edge.to}`;
+    const seen = labels.get(key);
+    if (!seen) {
+      merged.set(key, edge);
+      labels.set(key, edge.label ? [edge.label] : []);
+      continue;
     }
-    seen.add(key);
-    return true;
-  });
+    reason.push(`duplicate edge ${edge.from}->${edge.to}`);
+    // An identical label is the model restating itself and adds nothing.
+    if (edge.label && !seen.includes(edge.label)) seen.push(edge.label);
+  }
+  const unique = [...merged].map(([key, edge]) => ({
+    ...edge,
+    // Sliced to the same 120 the schema allows a single label, so a merge cannot
+    // hand the compiler a longer string than the type says is possible.
+    label: (labels.get(key) ?? []).join(" / ").slice(0, 120),
+  }));
 
   return {
     diagram: { ...diagram, edges: unique },

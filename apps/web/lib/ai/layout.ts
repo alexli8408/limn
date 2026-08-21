@@ -233,12 +233,6 @@ export function layoutDiagram(
   const { acyclic, reversed } = breakCycles(ids, edges);
   const rank = assignRanks(ids, acyclic);
 
-  // An explicit rank from the model overrides the computed one, but only if it
-  // does not invert an edge, otherwise arrows would point back up the flow.
-  for (const node of nodes) {
-    if (node.rank !== undefined) rank.set(node.id, node.rank);
-  }
-
   const ranks = new Map<number, string[]>();
   for (const id of ids) {
     const r = rank.get(id) ?? 0;

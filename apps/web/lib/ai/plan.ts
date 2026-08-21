@@ -80,6 +80,18 @@ const STROKE_STYLE = {
   dotted: "dotted",
 } as const;
 
+const NOTE_FONT_SIZE = 16;
+/** Excalidraw renders text at 1.25x the font size. */
+const NOTE_LINE_HEIGHT = NOTE_FONT_SIZE * 1.25;
+const NOTE_GAP = 12;
+/** Grey, for an annotation we placed rather than one the author positioned. */
+const NOTE_INK = "#868e96";
+
+/** How far the next stacked note has to drop to clear this one. */
+function noteHeight(text: string): number {
+  return text.split("\n").length * NOTE_LINE_HEIGHT + NOTE_GAP;
+}
+
 export interface CompileOptions {
   /** Existing scene, needed to recover geometry in preserve mode. */
   existing: readonly SyncElement[];
@@ -139,6 +151,8 @@ export function planDiagram(
   const preserve = diagram.layout === "preserve";
 
   const geometry = new Map<string, LayoutBox>();
+  /** Fill each preserved node was drawn with, so emphasis cannot repaint it. */
+  const sourceBackground = new Map<string, string>();
   const replacedIds: string[] = [];
   let aligned = 0;
   let rankCount = 0;
@@ -158,6 +172,14 @@ export function planDiagram(
       if (!bounds) continue;
       boxes.push(bounds);
       order.push(node.id);
+      // Prefer a source that is actually filled: a node's sources include the
+      // text inside it, and bound text is always transparent, so first-seen
+      // would report "no fill" for a shape the user did fill.
+      const filled = sources.find(
+        (el) => typeof el.backgroundColor === "string" && el.backgroundColor !== "transparent",
+      );
+      const fill = filled?.backgroundColor ?? sources[0]?.backgroundColor;
+      if (typeof fill === "string") sourceBackground.set(node.id, fill);
       replacedIds.push(...sources.map((el) => el.id));
     }
 
@@ -209,7 +231,15 @@ export function planDiagram(
     if (!box) continue;
     // An emphasised node takes the semantic colour the model asked for; an
     // ordinary one keeps the sketch's own ink.
-    const colors = PALETTE[node.emphasis as keyof typeof PALETTE] ?? ink;
+    const palette = PALETTE[node.emphasis as keyof typeof PALETTE];
+    const colors = palette ?? ink;
+    // Emphasis is a stroke, not a repaint. PALETTE's fills are Excalidraw's own
+    // pale blue and red tints, so applying one in preserve mode hands back a
+    // blue box over a red sketch. sourceBackground is only populated in preserve
+    // mode; a recomposed diagram has no fill of the author's to keep.
+    const background = palette
+      ? (sourceBackground.get(node.id) ?? palette.background)
+      : colors.background;
     skeletons.push({
       type: node.shape,
       id: elementId(node.id),
@@ -218,7 +248,7 @@ export function planDiagram(
       width: box.width,
       height: box.height,
       strokeColor: colors.stroke,
-      backgroundColor: colors.background,
+      backgroundColor: background,
       fillStyle: "solid",
       strokeWidth: 2,
       roughness: 1,
@@ -248,24 +278,41 @@ export function planDiagram(
     });
   }
 
-  // Annotations are placed under the diagram; they have no geometry of their own.
+  // Annotations carry no geometry of their own, so they stack under the diagram.
+  // In preserve mode that is wrong for any note the author actually wrote: the
+  // one promise the mode makes is that nothing moves, and a note collected off
+  // to one side of the sketch was being marched into a column under it, in grey,
+  // whatever colour it was written in. Grounded notes stay put; only a note with
+  // no source left to point at falls back to the stack.
   if (diagram.notes.length > 0) {
     const all = [...geometry.values()];
     const baseX = all.length ? Math.min(...all.map((b) => b.x)) : (options.origin?.x ?? 0);
     const baseY = all.length
       ? Math.max(...all.map((b) => b.y + b.height)) + 40
       : (options.origin?.y ?? 0);
-    diagram.notes.forEach((note, index) => {
+    let stacked = 0;
+
+    for (const note of diagram.notes) {
+      const sources = preserve
+        ? note.sourceIds
+            .map((id) => byId.get(id))
+            .filter((el): el is SyncElement => el !== undefined)
+        : [];
+      const bounds = boundsOf(sources);
+      const written = sources.find((el) => typeof el.strokeColor === "string")?.strokeColor;
+
       skeletons.push({
         type: "text",
-        x: baseX,
-        y: baseY + index * 30,
+        x: bounds ? bounds.x : baseX,
+        y: bounds ? bounds.y : baseY + stacked,
         text: note.text,
-        fontSize: 16,
-        strokeColor: "#868e96",
+        fontSize: NOTE_FONT_SIZE,
+        strokeColor: bounds && typeof written === "string" ? written : NOTE_INK,
       });
+      // Stepping by a flat 30px overlapped any note that runs to two lines.
+      if (!bounds) stacked += noteHeight(note.text);
       replacedIds.push(...note.sourceIds);
-    });
+    }
   }
 
 
