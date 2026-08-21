@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { CursorState, PeerState } from "@limn/protocol";
@@ -20,12 +20,29 @@ interface Props {
  */
 export default function RemoteCursors({ cursors, api }: Props) {
   const [, forceRender] = useState(0);
+  const lastView = useRef({ scrollX: 0, scrollY: 0, zoom: 0 });
 
   useEffect(() => {
     if (!api || cursors.size === 0) return;
     let frame = 0;
     const tick = () => {
-      forceRender((n) => (n + 1) % 1_000_000);
+      // Re-render only when the projection actually moved. A cursor arriving or
+      // moving already re-renders through the `cursors` prop, so the only thing
+      // this loop exists for is the local user panning and zooming, which
+      // changes where a remote cursor should be drawn without changing any of
+      // its own data. Rendering unconditionally meant a permanent 60fps React
+      // render for as long as anyone else was on the board.
+      const view = api.getAppState();
+      const zoom = view.zoom?.value ?? 1;
+      const previous = lastView.current;
+      if (
+        view.scrollX !== previous.scrollX ||
+        view.scrollY !== previous.scrollY ||
+        zoom !== previous.zoom
+      ) {
+        lastView.current = { scrollX: view.scrollX, scrollY: view.scrollY, zoom };
+        forceRender((n) => (n + 1) % 1_000_000);
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);

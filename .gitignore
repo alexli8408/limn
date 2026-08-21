@@ -36,3 +36,6 @@ pnpm-debug.log*
 /tmp/
 loadtest-results/
 supabase/.temp/
+
+# Worktrees created by parallel agents
+.claude/worktrees/

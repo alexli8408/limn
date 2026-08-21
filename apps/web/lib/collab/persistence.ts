@@ -56,6 +56,8 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
   let debounce: ReturnType<typeof setTimeout> | null = null;
   let ceiling: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
+  /** Resolves when the write currently in flight settles, so flush can wait. */
+  let settled: Promise<void> = Promise.resolve();
 
   const clearTimers = () => {
     if (debounce) {
@@ -75,6 +77,8 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
       return;
     }
     inFlight = true;
+    let done: () => void = () => {};
+    settled = new Promise<void>((resolve) => (done = resolve));
     try {
       const payload = pruneTombstones(elements, TOMBSTONE_TTL_MS, Date.now());
       const { data, error } = await supabase.rpc("save_board_snapshot", {
@@ -117,6 +121,7 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
       }
     } finally {
       inFlight = false;
+      done();
     }
   }
 
@@ -137,6 +142,15 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
 
     async flush(elements) {
       clearTimers();
+      dirty = null;
+
+      // A flush that lands while a debounced write is already in flight used to
+      // do nothing at all: write() coalesced it into `dirty` and returned, and
+      // clearTimers had just cancelled the only thing that would have picked
+      // `dirty` up again. That is exactly the tab-close case, so the last few
+      // seconds of a session were the ones most likely to be lost. Wait for the
+      // in-flight write, then write for real.
+      if (inFlight) await settled;
       dirty = null;
       await write(elements);
     },

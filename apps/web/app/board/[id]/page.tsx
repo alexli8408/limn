@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { SyncElement } from "@limn/protocol";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -20,6 +21,52 @@ interface PageProps {
   searchParams: Promise<{ t?: string }>;
 }
 
+/** Shown when the board exists but this account cannot open it. */
+function NoAccess({ linkWasReset }: { linkWasReset: boolean }) {
+  return (
+    <div className="landing min-h-screen">
+      <div className="paper" aria-hidden />
+      <div className="shell relative flex min-h-screen flex-col">
+        <header className="bar">
+          <Link href="/" className="mark text-[var(--ink-text)] no-underline">
+            limn
+          </Link>
+        </header>
+        <hr className="rule" />
+        <main className="flex flex-1 items-center">
+          <div className="max-w-lg py-16">
+            <p className="eyebrow">no access</p>
+            <h1 className="title text-balance">
+              {linkWasReset ? (
+                <>
+                  That share link{" "}
+                  <span className="text-[var(--ink-accent)]">no longer works.</span>
+                </>
+              ) : (
+                <>
+                  This board has not been{" "}
+                  <span className="text-[var(--ink-accent)]">shared with you.</span>
+                </>
+              )}
+            </h1>
+            <p className="mb-8 text-sm leading-relaxed text-[var(--ink-dim)]">
+              {linkWasReset
+                ? "Share links stop working as soon as the owner resets them, which is how access is revoked. Ask them for a fresh link."
+                : "You are signed in, but this board is private to the people it has been shared with. Ask the owner for a link."}
+            </p>
+            <Link href="/dashboard" className="primary">
+              Your boards
+            </Link>
+          </div>
+        </main>
+        <footer className="foot">
+          <span>Excalidraw · Supabase · OpenCV · Gemini</span>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 export default async function BoardPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { t: shareToken } = await searchParams;
@@ -36,11 +83,15 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
 
   // A share token grants nothing until it is redeemed for a collaborator row,
   // RLS cannot see a token held by the browser. Redeeming is idempotent.
+  let tokenRejected = false;
   if (shareToken) {
     const { error } = await supabase.rpc("claim_board_access", {
       p_share_token: shareToken,
     });
-    if (error) console.warn("[limn] share token rejected:", error.message);
+    if (error) {
+      tokenRejected = true;
+      console.warn("[limn] share token rejected:", error.message);
+    }
   }
 
   const { data: board } = await supabase
@@ -52,7 +103,10 @@ export default async function BoardPage({ params, searchParams }: PageProps) {
   if (!board) notFound();
 
   const { data: role } = await supabase.rpc("board_role_for", { p_board_id: id });
-  if (!role) notFound();
+  // Distinguish "this link is dead" from "this board is not shared with you".
+  // Both used to fall through to a bare 404, which left an invitee with no idea
+  // whether to ask for a new link or to ask to be added at all.
+  if (!role) return <NoAccess linkWasReset={tokenRejected || Boolean(shareToken)} />;
 
   const { data: snapshot } = await supabase
     .from("board_snapshots")
