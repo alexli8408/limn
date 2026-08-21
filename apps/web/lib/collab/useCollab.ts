@@ -70,6 +70,9 @@ export interface CollabHandle {
   flush: () => Promise<void>;
 }
 
+/** How long to wait before retrying a flush that had nowhere to send. */
+const OFFLINE_RETRY_MS = 1_000;
+
 const newPeerId = (): string =>
   `p_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 
@@ -175,17 +178,28 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   /* outbound                                                          */
   /* ---------------------------------------------------------------- */
 
+  // Self-reference, so a flush that cannot send yet can reschedule itself.
+  const flushSceneRef = useRef<() => void>(() => {});
+
   const flushScene = useCallback(() => {
     sceneTimer.current = null;
     const next = pendingScene.current;
-    pendingScene.current = null;
     if (!next) return;
 
+    // Check the channel before collecting, not after. collectDelta records what
+    // it returns as sent, and an element marked sent is never offered again
+    // until its version changes, so collecting while the socket is down threw
+    // those edits away permanently: peers only saw them if the user happened to
+    // touch the same elements again.
+    const channel = channelRef.current;
+    if (channel?.state !== "joined") {
+      sceneTimer.current = setTimeout(() => flushSceneRef.current(), OFFLINE_RETRY_MS);
+      return;
+    }
+
+    pendingScene.current = null;
     const delta = collectDelta(next, sentVersions.current);
     if (delta.length === 0) return;
-
-    const channel = channelRef.current;
-    if (!channel) return;
 
     const { parts, gid } = chunkElements(delta, MAX_BROADCAST_BYTES);
     parts.forEach((part, index) => {

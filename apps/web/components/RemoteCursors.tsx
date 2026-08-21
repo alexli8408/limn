@@ -42,10 +42,17 @@ export default function RemoteCursors({ cursors, api }: Props) {
   return (
     <div className="pointer-events-none absolute inset-0 z-[3] overflow-hidden">
       {[...cursors.values()].map((cursor) => {
-        const { x, y } = sceneCoordsToViewportCoords(
+        // sceneCoordsToViewportCoords returns page coordinates: it adds the
+        // Excalidraw container's own offsetLeft/offsetTop. This overlay is a
+        // sibling inside that same container, so its origin is already there
+        // and adding the offset again pushes every cursor down by the height of
+        // the header. Subtracting it puts them back on the pointer.
+        const point = sceneCoordsToViewportCoords(
           { sceneX: cursor.x, sceneY: cursor.y },
           appState,
         );
+        const x = point.x - (appState.offsetLeft ?? 0);
+        const y = point.y - (appState.offsetTop ?? 0);
         // Skip anything off-screen rather than letting the browser lay out
         // hundreds of absolutely positioned nodes outside the viewport.
         if (x < -80 || y < -80 || x > window.innerWidth + 80 || y > window.innerHeight + 80) {

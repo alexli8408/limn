@@ -95,7 +95,11 @@ export const geminiDiagramSchema = {
       description:
         "'diagram' when the sketch is boxes/shapes connected by lines or arrows. 'drawing' when it is a picture of something (a person, an object, a scene, a doodle, handwriting) rather than a node-and-edge structure. 'empty' when there is nothing meaningful. Choose 'drawing' whenever you are unsure: returning nodes for a picture destroys the author's work.",
     },
-    title: { type: "string", description: "Short title for the diagram." },
+    title: {
+      type: "string",
+      description:
+        "Three to five words naming what this diagram is, in the author's own vocabulary. Used to name their board, so write it as a label, not a sentence: 'Checkout retry flow', not 'A diagram showing the checkout retry flow'.",
+    },
     layout: {
       type: "string",
       enum: [...layouts],
@@ -113,9 +117,18 @@ export const geminiDiagramSchema = {
             type: "string",
             enum: [...nodeShapes],
             description:
-              "rectangle for a step or entity, diamond for a decision, ellipse for a start/end or actor.",
+              // "actor" is deliberately gone. It invited the model to read a
+              // drawn person as a node, which is exactly how a stick figure
+              // came back as an ellipse labelled "actor". Nothing here should
+              // suggest that a picture of something is a diagram element.
+              "rectangle for a step or entity, diamond for a decision, ellipse for a start or end point.",
           },
-          emphasis: { type: "string", enum: [...emphases] },
+          emphasis: {
+            type: "string",
+            enum: [...emphases],
+            description:
+              "Leave as 'normal' unless the sketch itself marks this node out. It overrides the colour the author drew in, so use it only for a node they clearly signalled: a failure or error path is 'danger', a terminal success is 'success', an aside is 'muted'.",
+          },
           sourceIds: {
             type: "array",
             items: { type: "string" },

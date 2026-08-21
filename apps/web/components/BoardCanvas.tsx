@@ -15,6 +15,7 @@ import type { Role, SyncElement } from "@limn/protocol";
 import { useCollab } from "@/lib/collab/useCollab";
 import { useStrokeBeautify } from "@/lib/beautify/useStrokeBeautify";
 import { compileDiagram, inkOf, tombstone } from "@/lib/ai/compile";
+import { autoTitleBoard } from "@/app/actions";
 import type { LimnDiagram } from "@/lib/ai/schema";
 import RemoteCursors from "./RemoteCursors";
 import PresenceBar from "./PresenceBar";
@@ -46,6 +47,25 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const [beautifyOn, setBeautifyOn] = useState(true);
   const [aiRun, setAiRun] = useState<AiRun | null>(null);
   const [sharing, setSharing] = useState(false);
+  // Shown in the header. Starts as whatever the server rendered and is replaced
+  // when the AI names an untitled board, so the change is visible immediately
+  // rather than only after a reload.
+  const [title, setTitle] = useState(props.title);
+
+  /**
+   * Names the board from what the model recognised, once, while it is still
+   * untitled. The server action is the real guard; this only avoids a pointless
+   * round trip and keeps the header in step.
+   */
+  const applyAiTitle = useCallback(
+    (suggested: string | undefined) => {
+      const clean = (suggested ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+      if (!clean || title !== "Untitled board") return;
+      setTitle(clean);
+      void autoTitleBoard(props.boardId, clean).catch(() => setTitle(props.title));
+    },
+    [title, props.boardId, props.title],
+  );
 
   const readOnly = props.role === "viewer";
 
@@ -220,9 +240,15 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           return;
         }
 
+        // Re-read the scene rather than reuse `all`, which was captured before
+        // a request that takes seconds. Anything drawn in the meantime, by this
+        // user or by a collaborator, is in the live scene and not in `all`, and
+        // committing the stale copy silently deleted all of it.
+        const current = api.getSceneElements() as unknown as SyncElement[];
+
         const bounds = boundsOf(target);
         const compiled = compileDiagram(payload.diagram, {
-          existing: all,
+          existing: current,
           origin: bounds ? { x: bounds.x, y: bounds.y } : { x: 0, y: 0 },
           // Redraw in whatever the sketch was drawn in, so cleaning up a red
           // diagram does not hand back a black one.
@@ -233,8 +259,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           throw new Error("the model did not return anything placeable");
         }
 
-        const next = [...tombstone(all, compiled.replacedIds), ...compiled.elements];
+        const next = [...tombstone(current, compiled.replacedIds), ...compiled.elements];
         commit(next, true);
+        applyAiTitle(payload.diagram.title);
 
         setAiRun({
           state: "done",
@@ -256,7 +283,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         collab.announceAi("error", "refine", props.displayName);
       }
     },
-    [api, readOnly, collab, props.boardId, props.displayName, commit],
+    [api, readOnly, collab, props.boardId, props.displayName, commit, applyAiTitle],
   );
 
   const runPromptAi = useCallback(
@@ -298,6 +325,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         });
         commit([...all, ...compiled.elements], true);
         api.scrollToContent(compiled.elements as never, { fitToContent: true });
+        applyAiTitle(payload.diagram.title);
 
         setAiRun({
           state: "done",
@@ -319,7 +347,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         collab.announceAi("error", "prompt", props.displayName);
       }
     },
-    [api, readOnly, collab, props.boardId, props.displayName, commit],
+    [api, readOnly, collab, props.boardId, props.displayName, commit, applyAiTitle],
   );
 
   const runVectorize = useCallback(
@@ -401,7 +429,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   return (
     <div className="relative flex h-full w-full flex-col">
       <PresenceBar
-        title={props.title}
+        title={title}
         status={collab.status}
         peers={collab.peers}
         isWriter={collab.isWriter}

@@ -40,6 +40,14 @@ export interface SnapshotWriter {
  * both believe they are the writer; the loser's call comes back `saved: false`
  * with the current version, and is retried against that instead of overwriting.
  */
+/**
+ * How long to wait after losing a compare-and-swap before writing again.
+ *
+ * Long enough for the winner's broadcast to arrive and be merged, short enough
+ * that the board is not left unsaved for a noticeable time.
+ */
+const CONTENTION_BACKOFF_MS = 600;
+
 export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
   const { supabase, boardId, onSaved } = options;
 
@@ -89,13 +97,23 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
         return;
       }
 
-      // Rejected as stale: adopt the stored version and try once more. Bounded,
-      // because a repeatedly losing writer means another peer is saving anyway
-      // and the scene is converging regardless.
+      // Rejected as stale: somebody else saved between our read and our write.
+      //
+      // Adopt their version, but do NOT immediately rewrite the same elements.
+      // That was the old behaviour and it undid the winner's save: our payload
+      // predates theirs, so retrying it with their version number as the
+      // precondition is a compare-and-swap that succeeds at overwriting exactly
+      // the work we lost the race to.
+      //
+      // Instead, hand the scene back to the scheduler. The winner's elements
+      // reach us over the broadcast channel within a frame or two, the merge
+      // folds them in, and the retry then writes a scene that contains both
+      // sides rather than half of one.
       version = row.version;
       if (attempt < 2) {
-        inFlight = false;
-        await write(elements, attempt + 1);
+        dirty = elements;
+        clearTimers();
+        debounce = setTimeout(run, CONTENTION_BACKOFF_MS);
       }
     } finally {
       inFlight = false;

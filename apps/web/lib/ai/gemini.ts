@@ -261,6 +261,21 @@ async function generate(args: GenerateArgs, attempt = 0): Promise<GenerateResult
     throw error;
   }
 
+  // Why finishReason is checked before the JSON: a response cut off at the token
+  // limit is usually still parseable, because constrained decoding keeps the
+  // shape valid on the way out. So a truncated diagram arrives as a smaller
+  // diagram, silently missing whatever came after the cut, and the user watches
+  // their sketch get redrawn with nodes missing and no indication why.
+  const finish = response.candidates?.[0]?.finishReason;
+  if (finish && finish !== "STOP") {
+    if (finish === "MAX_TOKENS") {
+      throw new Error(
+        "That sketch produced more diagram than fits in one response. Select part of it and clean up in pieces.",
+      );
+    }
+    throw new Error(`Gemini stopped early (${finish}) and the result would be incomplete.`);
+  }
+
   const text = response.text;
   if (!text) throw new Error("Gemini returned an empty response");
 

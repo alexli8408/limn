@@ -45,6 +45,32 @@ export async function renameBoard(boardId: string, title: string) {
   revalidatePath("/dashboard");
 }
 
+/**
+ * Names a board from what the AI just recognised in it, but only while it is
+ * still called "Untitled board".
+ *
+ * The model already writes a title on every generation and the code used to
+ * throw it away, so a week later every board on the dashboard was called
+ * "Untitled board" and none of them could be told apart. Naming only an
+ * untitled board means this can never overwrite a name a person chose.
+ */
+export async function autoTitleBoard(boardId: string, title: string) {
+  const clean = title.trim().replace(/\s+/g, " ").slice(0, 80);
+  if (!clean) return;
+
+  const { supabase } = await requireUser(`/board/${boardId}`);
+  const { error } = await supabase
+    .from("boards")
+    .update({ title: clean })
+    .eq("id", boardId)
+    .eq("title", "Untitled board");
+
+  // A board somebody else already named is not an error, it is the guard doing
+  // its job, so this stays quiet either way.
+  if (error) console.warn("[limn] auto-title skipped:", error.message);
+  revalidatePath("/dashboard");
+}
+
 export async function deleteBoard(boardId: string) {
   const { supabase } = await requireUser("/dashboard");
   const { error } = await supabase.from("boards").delete().eq("id", boardId);
