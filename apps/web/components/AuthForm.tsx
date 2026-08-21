@@ -1,11 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
+  requestPasswordReset,
+  resendConfirmation,
   signInWithGoogle,
   signInWithPassword,
   signUpWithPassword,
+  updatePassword,
   type AuthResult,
 } from "@/app/auth/actions";
 
@@ -15,6 +19,15 @@ interface Props {
   /** Surfaced by the OAuth callback, which can only report back through the URL. */
   initialError?: string;
 }
+
+/* Hoisted out of the component because the recovery forms below are separate
+   components rendered on their own pages, and a password field that does not
+   match the one on /signin reads as a different site. */
+const field =
+  "w-full rounded-sm border border-[var(--ink-line)] bg-[var(--ink-void)] px-3 py-2.5 text-sm text-[var(--ink-text)] outline-none transition placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-accent)]";
+
+const fieldLabel =
+  "font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]";
 
 function Submit({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -29,6 +42,20 @@ function Submit({ label }: { label: string }) {
   );
 }
 
+/* A div rather than a p: the sign-up notice carries the resend form inside it,
+   and a form nested in a paragraph is closed by the parser before it renders. */
+function Banner({ tone, children }: { tone: "bad" | "good"; children: React.ReactNode }) {
+  const skin =
+    tone === "bad"
+      ? "border-[var(--ink-bad)]/40 bg-[var(--ink-bad)]/10 text-[var(--ink-bad)]"
+      : "border-[var(--ink-good)]/40 bg-[var(--ink-good)]/10 text-[var(--ink-good)]";
+  return (
+    <div className={`mt-4 rounded-sm border px-3 py-2 text-xs leading-relaxed ${skin}`}>
+      {children}
+    </div>
+  );
+}
+
 export default function AuthForm({ next, initialError }: Props) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
 
@@ -40,12 +67,13 @@ export default function AuthForm({ next, initialError }: Props) {
     signUpWithPassword,
     {},
   );
+  const [resendState, resendAction] = useActionState<AuthResult, FormData>(
+    resendConfirmation,
+    {},
+  );
 
   const state = mode === "signin" ? signInState : signUpState;
   const message = state.error ?? initialError;
-
-  const field =
-    "w-full rounded-sm border border-[var(--ink-line)] bg-[var(--ink-void)] px-3 py-2.5 text-sm text-[var(--ink-text)] outline-none transition placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-accent)]";
 
   return (
     <div className="w-full max-w-sm">
@@ -99,9 +127,7 @@ export default function AuthForm({ next, initialError }: Props) {
 
         {mode === "signup" && (
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-              Name
-            </span>
+            <span className={`mb-1.5 block ${fieldLabel}`}>Name</span>
             <input
               name="name"
               autoComplete="name"
@@ -112,9 +138,7 @@ export default function AuthForm({ next, initialError }: Props) {
         )}
 
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-            Email
-          </span>
+          <span className={`mb-1.5 block ${fieldLabel}`}>Email</span>
           <input
             name="email"
             type="email"
@@ -125,11 +149,24 @@ export default function AuthForm({ next, initialError }: Props) {
           />
         </label>
 
-        <label className="block">
-          <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-            Password
-          </span>
+        {/* The label is no longer the wrapper here, because the way out sits on
+            the same row and a link inside a label steals the click. */}
+        <div>
+          <div className="mb-1.5 flex items-baseline justify-between gap-3">
+            <label htmlFor="auth-password" className={fieldLabel}>
+              Password
+            </label>
+            {mode === "signin" && (
+              <Link
+                href="/auth/reset"
+                className={`${fieldLabel} transition hover:text-[var(--ink-accent-hot)]`}
+              >
+                Forgot password
+              </Link>
+            )}
+          </div>
           <input
+            id="auth-password"
             name="password"
             type="password"
             required
@@ -138,24 +175,128 @@ export default function AuthForm({ next, initialError }: Props) {
             placeholder={mode === "signup" ? "At least 8 characters" : "••••••••"}
             className={field}
           />
-        </label>
+        </div>
 
         <div className="pt-1">
           <Submit label={mode === "signin" ? "Sign in" : "Create account"} />
         </div>
       </form>
 
-      {message && (
-        <p className="mt-4 rounded-sm border border-[var(--ink-bad)]/40 bg-[var(--ink-bad)]/10 px-3 py-2 text-xs leading-relaxed text-[var(--ink-bad)]">
-          {message}
-        </p>
-      )}
+      {message && <Banner tone="bad">{message}</Banner>}
 
       {state.notice && (
-        <p className="mt-4 rounded-sm border border-[var(--ink-good)]/40 bg-[var(--ink-good)]/10 px-3 py-2 text-xs leading-relaxed text-[var(--ink-good)]">
-          {state.notice}
-        </p>
+        <Banner tone="good">
+          {/* Once a resend has been asked for, its result is the newer truth, so
+              it takes over the line instead of stacking a second green box. */}
+          {resendState.notice ?? state.notice}
+          {state.pendingEmail && (
+            <form action={resendAction} className="mt-2">
+              <input type="hidden" name="email" value={state.pendingEmail} />
+              <input type="hidden" name="next" value={next} />
+              <Resend />
+            </form>
+          )}
+        </Banner>
       )}
+
+      {resendState.error && <Banner tone="bad">{resendState.error}</Banner>}
+    </div>
+  );
+}
+
+/* Deliberately a line of text and not a button. Google is the path most people
+   take, and a second filled control under the notice would pull harder than it. */
+function Resend() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="font-mono text-[10px] uppercase tracking-[0.14em] underline underline-offset-4 transition hover:text-[var(--ink-text)] disabled:opacity-50"
+    >
+      {pending ? "Sending…" : "Resend the email"}
+    </button>
+  );
+}
+
+/** /auth/reset: ask for an address, say the same thing back either way. */
+export function ResetRequestForm() {
+  const [state, action] = useActionState<AuthResult, FormData>(requestPasswordReset, {});
+
+  return (
+    <div className="w-full max-w-sm">
+      <form action={action} className="space-y-3">
+        <label className="block">
+          <span className={`mb-1.5 block ${fieldLabel}`}>Email</span>
+          <input
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@example.com"
+            className={field}
+          />
+        </label>
+
+        <div className="pt-1">
+          <Submit label="Email me a reset link" />
+        </div>
+      </form>
+
+      {state.error && <Banner tone="bad">{state.error}</Banner>}
+      {state.notice && <Banner tone="good">{state.notice}</Banner>}
+
+      <p className="mt-6">
+        <Link
+          href="/signin"
+          className={`${fieldLabel} transition hover:text-[var(--ink-accent-hot)]`}
+        >
+          Back to sign in
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+/** /auth/reset/confirm: only useful with the recovery session already in place. */
+export function NewPasswordForm() {
+  const [state, action] = useActionState<AuthResult, FormData>(updatePassword, {});
+
+  return (
+    <div className="w-full max-w-sm">
+      <form action={action} className="space-y-3">
+        <label className="block">
+          <span className={`mb-1.5 block ${fieldLabel}`}>New password</span>
+          <input
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            className={field}
+          />
+        </label>
+
+        <label className="block">
+          <span className={`mb-1.5 block ${fieldLabel}`}>Type it again</span>
+          <input
+            name="confirm"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            placeholder="Same password"
+            className={field}
+          />
+        </label>
+
+        <div className="pt-1">
+          <Submit label="Set new password" />
+        </div>
+      </form>
+
+      {state.error && <Banner tone="bad">{state.error}</Banner>}
     </div>
   );
 }
