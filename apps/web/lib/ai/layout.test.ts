@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { estimateNodeSize, layoutDiagram } from "./layout";
-import { parseDiagram } from "./schema";
+import { layouts, parseDiagram } from "./schema";
 import type { DiagramEdge, DiagramNode } from "./schema";
 
 /**
@@ -81,6 +81,7 @@ test("a cycle terminates, and reports the edge it reversed", () => {
 
 test("a self-loop is dropped by validation before layout ever sees it", () => {
   const { diagram, dropped } = parseDiagram({
+    kind: "diagram",
     layout: "layered-tb",
     nodes: [{ id: "a", label: "A", shape: "rectangle", sourceIds: [] }],
     edges: [{ from: "a", to: "a", directed: true }],
@@ -92,6 +93,7 @@ test("a self-loop is dropped by validation before layout ever sees it", () => {
 
 test("edges referencing an undeclared node are dropped, not rendered dangling", () => {
   const { diagram, dropped } = parseDiagram({
+    kind: "diagram",
     layout: "layered-tb",
     nodes: [{ id: "a", label: "A", shape: "rectangle", sourceIds: [] }],
     edges: [
@@ -105,21 +107,83 @@ test("edges referencing an undeclared node are dropped, not rendered dangling", 
   assert.ok(dropped.reason.some((r) => r.includes("ghost")));
 });
 
-test("duplicate edges collapse", () => {
+test("duplicate edges collapse and their labels merge onto the one arrow", () => {
   const { diagram } = parseDiagram({
+    kind: "diagram",
     layout: "layered-tb",
     nodes: [
       { id: "a", label: "", shape: "rectangle", sourceIds: [] },
       { id: "b", label: "", shape: "rectangle", sourceIds: [] },
     ],
     edges: [
-      { from: "a", to: "b", directed: true, label: "x" },
-      { from: "a", to: "b", directed: true, label: "x" },
-      { from: "a", to: "b", directed: true, label: "different" },
+      { from: "a", to: "b", directed: true, label: "yes" },
+      { from: "a", to: "b", directed: true, label: "yes" },
+      { from: "a", to: "b", directed: true, label: "no" },
+      { from: "b", to: "a", directed: true, label: "retry" },
     ],
     rationale: "",
   });
-  assert.equal(diagram.edges.length, 2, "same label collapses, different label does not");
+
+  // Both branches of a decision that rejoin the same node compile to two arrows
+  // on identical coordinates, so keeping the label out of the key is the whole
+  // point: one arrow gets drawn either way, and both labels have to reach it.
+  assert.equal(diagram.edges.length, 2, "a->b is one arrow; b->a is a different pair");
+  assert.equal(diagram.edges.find((e) => e.from === "a")?.label, "yes / no");
+  assert.equal(diagram.edges.find((e) => e.from === "b")?.label, "retry", "reverse kept");
+});
+
+test("a repeated edge with one label does not gain a separator", () => {
+  const { diagram } = parseDiagram({
+    kind: "diagram",
+    layout: "layered-tb",
+    nodes: [
+      { id: "a", label: "", shape: "rectangle", sourceIds: [] },
+      { id: "b", label: "", shape: "rectangle", sourceIds: [] },
+    ],
+    edges: [
+      { from: "a", to: "b", directed: true, label: "sends" },
+      { from: "a", to: "b", directed: true, label: "" },
+    ],
+    rationale: "",
+  });
+  assert.equal(diagram.edges.length, 1);
+  assert.equal(diagram.edges[0]?.label, "sends");
+});
+
+test('"grid" is no longer a layout the model can ask for', () => {
+  // It was accepted and then mapped onto the top-to-bottom pass like anything
+  // that is not layered-lr, so a sketch correctly read as a grid came back as a
+  // single column. Better not to offer it than to offer it and ignore it.
+  // @ts-expect-error the union must not contain it. If this line stops erroring,
+  // the value is back and so is the silent conversion to a column.
+  const gone: (typeof layouts)[number] = "grid";
+  assert.ok(!(layouts as readonly string[]).includes(gone));
+  assert.throws(
+    () =>
+      parseDiagram({
+        kind: "diagram",
+        layout: "grid",
+        nodes: [],
+        edges: [],
+        rationale: "",
+      }),
+    Error,
+    "a grid layout must be rejected, not silently laid out top to bottom",
+  );
+});
+
+test("a response with no kind is treated as a drawing, not converted", () => {
+  const { diagram } = parseDiagram({
+    layout: "preserve",
+    nodes: [{ id: "a", label: "A", shape: "rectangle", sourceIds: ["x"] }],
+    edges: [],
+    rationale: "",
+  });
+
+  // Failing closed: converting tombstones the sketch, so a truncated response
+  // that lost its kind must not be allowed to do that on a default.
+  assert.equal(diagram.kind, "drawing");
+  assert.equal(diagram.nodes.length, 0);
 });
 
 test("disconnected components are all placed", () => {

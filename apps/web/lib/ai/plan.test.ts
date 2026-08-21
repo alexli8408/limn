@@ -9,6 +9,10 @@ import type { LimnDiagram } from "./schema";
  * compiler carried a fixed palette and the schema never asked the model about
  * colour. Redrawing someone's red sketch in black reads as the feature taking
  * their work away rather than tidying it, so this pins the colour path.
+ *
+ * The preserve-mode cases are the same fault in a different place: that mode
+ * promises the author's arrangement and colours survive, so anything it moves or
+ * repaints is a bug however good the new position or colour is.
  */
 
 function sketch(partial: Partial<SyncElement> & { id: string }): SyncElement {
@@ -93,11 +97,91 @@ test("a coloured sketch is redrawn in that colour, nodes and arrows alike", () =
   assert.equal(plain.length, 2, "unemphasised nodes should keep the user's ink");
 
   // n3 asked for danger, which is a deliberate semantic choice by the model and
-  // still wins over the sketch's colour.
+  // still wins over the sketch's colour. The stroke only; the fill is the
+  // author's, which the next test covers.
   const emphasised = skeletons.filter(
-    (el) => el.type === "rectangle" && el.backgroundColor === "#fff5f5",
+    (el) => el.type === "rectangle" && el.strokeColor === "#e03131",
   );
-  assert.equal(emphasised.length, 1, "an emphasised node should keep its palette");
+  assert.equal(emphasised.length, 1, "an emphasised node should keep its palette stroke");
+});
+
+test("emphasis in preserve mode restrokes a node without repainting its fill", () => {
+  const FILL = "#ffc9c9";
+  const existing = [
+    sketch({ id: "a" }),
+    sketch({ id: "b", x: 200 }),
+    // n3 is the emphasised node, and the author filled it.
+    sketch({ id: "c", x: 400, backgroundColor: FILL }),
+  ];
+
+  const { skeletons } = planDiagram(diagram(), { existing, ink: inkOf(existing) });
+  const hot = skeletons.find((el) => el.strokeColor === "#e03131");
+
+  assert.ok(hot, "the emphasised node should still take the palette stroke");
+  assert.equal(
+    hot.backgroundColor,
+    FILL,
+    "PALETTE's pale fill was painted over the colour the author chose",
+  );
+});
+
+test("a note in preserve mode stays where it was written, in its own colour", () => {
+  const WRITTEN_IN = "#e8590c";
+  const existing = [
+    sketch({ id: "a" }),
+    sketch({ id: "b", x: 200 }),
+    sketch({ id: "c", x: 400 }),
+    // Off to one side and above the shapes, so the stacked fallback position is
+    // nowhere near it and cannot pass by coincidence.
+    sketch({
+      id: "t",
+      type: "text",
+      x: 640,
+      y: -120,
+      width: 90,
+      height: 20,
+      strokeColor: WRITTEN_IN,
+    }),
+  ];
+
+  const annotated = { ...diagram(), notes: [{ text: "check this", sourceIds: ["t"] }] };
+  const { skeletons, replacedIds } = planDiagram(annotated as unknown as LimnDiagram, {
+    existing,
+    ink: inkOf(existing),
+  });
+  const note = skeletons.find((el) => el.type === "text");
+
+  assert.ok(note, "the note should have compiled to a text element");
+  assert.equal(note.x, 640);
+  assert.equal(note.y, -120, "a preserved note was marched into a column under the diagram");
+  assert.equal(note.strokeColor, WRITTEN_IN, "the note came back in house grey");
+  assert.ok(replacedIds.includes("t"), "the original text still has to be tombstoned");
+});
+
+test("a note with nothing to ground it stacks, clear of the note above", () => {
+  const existing = [sketch({ id: "a" }), sketch({ id: "b", x: 200 }), sketch({ id: "c", x: 400 })];
+  const annotated = {
+    ...diagram(),
+    notes: [
+      { text: "first line\nsecond line", sourceIds: [] },
+      // A sourceId that resolves to nothing is the same as having none.
+      { text: "after it", sourceIds: ["gone"] },
+    ],
+  };
+
+  const { skeletons } = planDiagram(annotated as unknown as LimnDiagram, {
+    existing,
+    ink: inkOf(existing),
+  });
+  const texts = skeletons.filter((el) => el.type === "text");
+  assert.equal(texts.length, 2);
+
+  // Two lines at 16px is 40px tall, so the old flat 30px step drew the second
+  // note through the first.
+  const top = Number(texts[0]!.y);
+  const below = Number(texts[1]!.y);
+  assert.ok(below - top >= 40, `stacked notes overlap, only ${below - top}px apart`);
+  assert.equal(texts[0]!.strokeColor, "#868e96", "a note we placed is house grey");
 });
 
 test("a sketch drawn in the default colour is unchanged by the ink path", () => {
