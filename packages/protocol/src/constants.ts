@@ -55,14 +55,23 @@ export const TOMBSTONE_TTL_MS = 24 * 60 * 60 * 1000;
 /* presence                                                          */
 /* ---------------------------------------------------------------- */
 
+/**
+ * Cursor chip colours.
+ *
+ * Every chip carries a white name label, so each entry has to clear 4.5:1
+ * against white. Four of the original ten did not: the green, amber, teal and
+ * orange sat between 2.5:1 and 4.4:1, which put a peer's name somewhere between
+ * hard and impossible to read on the busiest boards. Darkened to clear it while
+ * staying the same hue, so a collaborator's colour is still recognisable.
+ */
 export const PRESENCE_COLORS = [
   "#e03131",
   "#1971c2",
-  "#2f9e44",
-  "#f08c00",
+  "#207a34",
+  "#a35c00",
   "#9c36b5",
-  "#0c8599",
-  "#e8590c",
+  "#0a6f80",
+  "#b03f06",
   "#5f3dc4",
   "#c2255c",
   "#087f5b",

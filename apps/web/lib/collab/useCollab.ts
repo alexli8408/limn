@@ -40,6 +40,18 @@ export interface UseCollabOptions {
   initialVersion: number;
   /** Applies merged remote state to the canvas. Must not re-enter publishLocal. */
   onRemoteScene: (elements: SyncElement[], changed: string[]) => void;
+  /**
+   * The canvas as it is right now, used as the merge base.
+   *
+   * Without this the base was sceneRef, which only advances inside
+   * publishScene, which only runs from Excalidraw's onChange, which is
+   * dispatched after a React commit and throttled through rAF. The ref
+   * therefore trailed the live canvas by at least a frame, and the merged array
+   * goes to updateScene, which replaces every element. Anything created in that
+   * lag window was not in the base and so was deleted: a stroke begun a few
+   * milliseconds before a peer's frame landed vanished mid-draw.
+   */
+  getLiveElements?: () => SyncElement[];
 }
 
 /** A collaborator's in-flight AI generation, so the canvas is not silently busy. */
@@ -104,6 +116,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     initialElements,
     initialVersion,
     onRemoteScene,
+    getLiveElements,
   } = options;
 
   const supabase = supabaseBrowser();
@@ -143,6 +156,8 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   // would otherwise capture the first render's values forever.
   const onRemoteRef = useRef(onRemoteScene);
   onRemoteRef.current = onRemoteScene;
+  const liveRef = useRef(getLiveElements);
+  liveRef.current = getLiveElements;
 
   const writer = useMemo(() => {
     const elected = electWriter(peers);
@@ -189,31 +204,35 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   /* ---------------------------------------------------------------- */
 
   // Self-reference, so a flush that cannot send yet can reschedule itself.
-  const flushSceneRef = useRef<() => void>(() => {});
+  const flushSceneRef = useRef<() => Promise<void>>(async () => {});
 
-  const flushScene = useCallback(() => {
+  const flushScene = useCallback(async () => {
     sceneTimer.current = null;
     const next = pendingScene.current;
     if (!next) return;
 
-    // Check the channel before collecting, not after. collectDelta records what
-    // it returns as sent, and an element marked sent is never offered again
-    // until its version changes, so collecting while the socket is down threw
-    // those edits away permanently: peers only saw them if the user happened to
-    // touch the same elements again.
+    // Check the channel before touching any bookkeeping. An element recorded as
+    // sent is never offered again until its version changes, so recording one
+    // the socket never carried threw that edit away permanently: peers only saw
+    // it if the user happened to touch the same element a second time.
     const channel = channelRef.current;
     if (channel?.state !== "joined") {
-      sceneTimer.current = setTimeout(() => flushSceneRef.current(), OFFLINE_RETRY_MS);
+      sceneTimer.current = setTimeout(() => void flushSceneRef.current(), OFFLINE_RETRY_MS);
       return;
     }
 
-    pendingScene.current = null;
-    const delta = collectDelta(next, sentVersions.current);
+    // Diff without recording. collectDelta marks as it collects, which is the
+    // same trap one level down: a send that fails, times out, or loses one chunk
+    // of a group would still leave every id in that group marked as delivered.
+    const sent = sentVersions.current;
+    const delta = next.filter((el) => sent.get(el.id) !== el.version);
     if (delta.length === 0) return;
 
+    pendingScene.current = null;
+
     const { parts, gid } = chunkElements(delta, MAX_BROADCAST_BYTES);
-    parts.forEach((part, index) => {
-      channel.send({
+    for (const [index, part] of parts.entries()) {
+      const result = await channel.send({
         type: "broadcast",
         event: BoardEvent.SCENE,
         payload: {
@@ -223,8 +242,20 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
           ...(parts.length > 1 ? { chunk: { gid, i: index, n: parts.length } } : {}),
         },
       });
-    });
+
+      if (result !== "ok") {
+        // Requeue what did not land and stop. Nothing in this chunk is marked,
+        // so the next flush offers it again rather than assuming it arrived.
+        pendingScene.current = next;
+        sceneTimer.current = setTimeout(() => void flushSceneRef.current(), OFFLINE_RETRY_MS);
+        return;
+      }
+
+      // Only now is it true that a peer has been given these.
+      for (const el of part) sent.set(el.id, el.version);
+    }
   }, [peerId]);
+  flushSceneRef.current = flushScene;
 
   const publishScene = useCallback(
     (elements: readonly SyncElement[]) => {
@@ -240,7 +271,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
       if (isWriterRef.current) snapshots.mark(snapshot);
 
       if (sceneTimer.current === null) {
-        sceneTimer.current = setTimeout(flushScene, SCENE_FLUSH_INTERVAL_MS);
+        sceneTimer.current = setTimeout(() => void flushScene(), SCENE_FLUSH_INTERVAL_MS);
       }
     },
     [flushScene, snapshots],
@@ -310,8 +341,12 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   );
 
   const flush = useCallback(async () => {
-    flushScene();
-    await snapshots.flush(sceneRef.current);
+    await flushScene();
+    // Gated on the writer, like mark() already is. flush is reachable from
+    // visibilitychange, effect cleanup and the Save now menu item, so without
+    // this any peer could overwrite the whole board simply by closing its tab,
+    // using whatever scene that tab happened to hold.
+    if (isWriterRef.current) await snapshots.flush(sceneRef.current);
   }, [flushScene, snapshots]);
 
   /* ---------------------------------------------------------------- */
@@ -320,16 +355,26 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
 
   const applyRemote = useCallback((incoming: SyncElement[]) => {
     if (incoming.length === 0) return;
-    const { elements, changed } = reconcile(sceneRef.current, incoming);
+    // The canvas, not the ref, whenever the canvas can be asked.
+    const base = liveRef.current?.() ?? sceneRef.current;
+    const { elements, changed } = reconcile(base, incoming);
     if (changed.length === 0) return;
 
     sceneRef.current = elements;
-    lastFingerprint.current = sceneFingerprint(elements);
-    // Remote elements are already accounted for as "sent", echoing them back to
-    // the peer that authored them would loop forever.
-    for (const el of incoming) sentVersions.current.set(el.id, el.version);
     if (isWriterRef.current) snapshots.mark(elements);
     onRemoteRef.current(elements, changed);
+
+    // Fingerprint and sent-versions are recorded AFTER the apply, not before.
+    // updateScene runs syncInvalidIndices synchronously, which bumps version and
+    // versionNonce in place on the very objects recorded here whenever incoming
+    // fractional indices disagree with local z-order. Recorded first, those
+    // numbers were already stale by the time the call returned, so the next
+    // onChange saw a changed fingerprint and rebroadcast the peer's own elements
+    // at a bumped version. Traffic doubled and z-order flapped between tabs.
+    lastFingerprint.current = sceneFingerprint(sceneRef.current);
+    // Remote elements are already accounted for as "sent": echoing them back to
+    // the peer that authored them would loop forever.
+    for (const el of incoming) sentVersions.current.set(el.id, el.version);
   }, [snapshots]);
 
   useEffect(() => {
@@ -429,6 +474,11 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         setPeers(roster);
 
         const live = new Set(roster.map((p) => p.peerId));
+        // "X is generating a diagram…" used to stick for the rest of the session
+        // if X closed the tab mid-run, because only X could clear it.
+        setPeerActivity((previous) =>
+          previous && !live.has(previous.peerId) ? null : previous,
+        );
         setCursors((previous) => {
           // A viewer's cursor arrives as presence state, not as a broadcast.
           const next = new Map<string, CursorState & { peer: PeerState }>();
@@ -451,6 +501,12 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
       .subscribe((state, error) => {
         if (state === "SUBSCRIBED") {
           setStatus("connected");
+          // Forget what was delivered before this connection. Anything drawn
+          // during an outage is still in the local scene but was never sent,
+          // and an id already recorded would never be offered again. Clearing
+          // re-offers the whole scene; reconcile drops the duplicates on the
+          // receiving side, which is cheaper than losing the work.
+          sentVersions.current.clear();
           void channel.track({
             peerId,
             userId,

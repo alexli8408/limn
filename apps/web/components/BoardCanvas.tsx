@@ -100,6 +100,15 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     [api],
   );
 
+  // Deleted elements included: they are tombstones, and dropping them from the
+  // merge base would resurrect anything a peer had already deleted.
+  const getLiveElements = useCallback(
+    () =>
+      (api?.getSceneElementsIncludingDeleted() as unknown as SyncElement[]) ??
+      props.initialElements,
+    [api, props.initialElements],
+  );
+
   const collab = useCollab({
     boardId: props.boardId,
     userId: props.userId,
@@ -110,6 +119,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     initialElements: props.initialElements,
     initialVersion: props.initialVersion,
     onRemoteScene,
+    getLiveElements,
   });
 
   /** Applies a locally produced scene and publishes it in one step. */
