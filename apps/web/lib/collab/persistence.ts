@@ -15,6 +15,16 @@ interface WriterOptions {
   boardId: string;
   baseVersion: number;
   onSaved: (version: number, at: number) => void;
+  /**
+   * The scene as it stands right now.
+   *
+   * Only read after losing a compare-and-swap, where the payload that lost is
+   * exactly the wrong thing to send again. By the time the retry fires, the
+   * winner's elements have arrived over the channel and been merged, so asking
+   * for the scene gets one containing both sides; replaying the captured array
+   * gets one containing neither.
+   */
+  getScene: () => readonly SyncElement[];
 }
 
 export interface SnapshotWriter {
@@ -49,7 +59,7 @@ export interface SnapshotWriter {
 const CONTENTION_BACKOFF_MS = 600;
 
 export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
-  const { supabase, boardId, onSaved } = options;
+  const { supabase, boardId, onSaved, getScene } = options;
 
   let version = options.baseVersion;
   let dirty: readonly SyncElement[] | null = null;
@@ -109,15 +119,24 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
       // precondition is a compare-and-swap that succeeds at overwriting exactly
       // the work we lost the race to.
       //
-      // Instead, hand the scene back to the scheduler. The winner's elements
-      // reach us over the broadcast channel within a frame or two, the merge
-      // folds them in, and the retry then writes a scene that contains both
-      // sides rather than half of one.
+      // Instead, schedule a retry that reads the scene fresh. The winner's
+      // elements reach us over the broadcast channel, the merge folds them in,
+      // and the retry writes a scene that contains both sides rather than half
+      // of one.
+      //
+      // What this must not do is `dirty = elements`, which is what it used to
+      // do, one line under a comment saying not to. That reinstates the payload
+      // that just lost, and clearTimers cancels the only thing that would have
+      // replaced it, so unless a fresh mark() happened to land inside the
+      // backoff the retry wrote the loser's scene against the winner's version:
+      // a compare-and-swap that succeeds at overwriting precisely the work it
+      // lost the race to. It also clobbered a merged mark() that arrived while
+      // the RPC was still in flight, which is the very case the backoff is
+      // waiting for.
       version = row.version;
       if (attempt < 2) {
-        dirty = elements;
         clearTimers();
-        debounce = setTimeout(run, CONTENTION_BACKOFF_MS);
+        debounce = setTimeout(() => retry(attempt + 1), CONTENTION_BACKOFF_MS);
       }
     } finally {
       inFlight = false;
@@ -130,6 +149,25 @@ export function createSnapshotWriter(options: WriterOptions): SnapshotWriter {
     const elements = dirty;
     dirty = null;
     if (elements) void write(elements);
+  };
+
+  /**
+   * The scheduled half of a lost compare-and-swap.
+   *
+   * Prefers anything marked during the backoff, which is the merged scene, and
+   * falls back to reading the canvas directly so a winner whose broadcast never
+   * arrived does not leave this peer's own work unwritten.
+   *
+   * `attempt` is threaded through rather than left to default. run() calls
+   * write() with no attempt, so the `attempt < 2` bound could never advance
+   * past its first value and a board under sustained contention would retry
+   * without limit.
+   */
+  const retry = (attempt: number) => {
+    clearTimers();
+    const elements = dirty ?? getScene();
+    dirty = null;
+    void write(elements, attempt);
   };
 
   return {

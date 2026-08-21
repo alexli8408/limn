@@ -191,6 +191,16 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   /** Remote updates withheld while the local user is mid-gesture. See applyRemote. */
   const deferredRemote = useRef(new Map<string, SyncElement>());
   const drainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * True once the channel effect has torn down.
+   *
+   * flushScene reschedules itself every second while the socket is not joined,
+   * which is right during a reconnect and wrong after the board has gone away:
+   * teardown nulls channelRef permanently, so the retry can never succeed and
+   * never stops asking. One board opened and left behind through the Back
+   * button leaves a timer firing forever, holding the whole scene alive with it.
+   */
+  const torndown = useRef(false);
   const applyRemoteRef = useRef<(incoming: SyncElement[]) => void>(() => {});
 
   // Kept in refs as well as state: the channel callbacks are registered once and
@@ -256,6 +266,11 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         supabase,
         boardId,
         baseVersion,
+        // Read only on a compare-and-swap retry. The canvas is the better
+        // source than the ref when one is available, for the same reason
+        // applyRemote prefers it: it is the scene the user is actually looking
+        // at, including anything applied since the last publish.
+        getScene: () => liveRef.current?.() ?? sceneRef.current,
         onSaved: (version, at) => {
           setSavedVersion(version);
           setLastSavedAt(at);
@@ -300,6 +315,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     // it if the user happened to touch the same element a second time.
     const channel = channelRef.current;
     if (channel?.state !== "joined") {
+      if (torndown.current) return;
       sceneTimer.current = setTimeout(() => void flushSceneRef.current(), OFFLINE_RETRY_MS);
       return;
     }
@@ -550,6 +566,11 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   applyRemoteRef.current = applyRemote;
 
   useEffect(() => {
+    // Cleared on every subscribe, not only on the first. Reconnect tears the
+    // channel down and runs this again, and a flag left set from the previous
+    // teardown would stop the retry chain for the rest of the session.
+    torndown.current = false;
+
     const channel = supabase.channel(boardChannel(boardId), {
       // Private channels are what make the realtime.messages RLS policies apply.
       // Without this the topic is unauthenticated and any client could subscribe.
@@ -722,6 +743,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
       });
 
     return () => {
+      torndown.current = true;
       if (sceneTimer.current) clearTimeout(sceneTimer.current);
       if (cursorTimer.current) clearTimeout(cursorTimer.current);
       if (drainTimer.current) clearTimeout(drainTimer.current);

@@ -125,6 +125,30 @@ test("emphasis in preserve mode restrokes a node without repainting its fill", (
   );
 });
 
+test("an ordinary node in preserve mode keeps the fill the author gave it", () => {
+  const FILL = "#b2f2bb";
+  const existing = [
+    // Only one of the three is filled, so the scene-wide majority is
+    // transparent and a node that falls back to it comes back empty.
+    sketch({ id: "a", backgroundColor: FILL }),
+    sketch({ id: "b", x: 200 }),
+    sketch({ id: "c", x: 400 }),
+  ];
+
+  const { skeletons } = planDiagram(diagram(), { existing, ink: inkOf(existing) });
+
+  // n1 maps to the filled source and is not one the model emphasised, which is
+  // the branch that used to read the majority instead of the recorded fill.
+  const filled = skeletons.filter(
+    (el) => el.type === "rectangle" && el.backgroundColor === FILL,
+  );
+  assert.equal(
+    filled.length,
+    1,
+    "an unemphasised node was repainted with the scene majority instead of its own fill",
+  );
+});
+
 test("a note in preserve mode stays where it was written, in its own colour", () => {
   const WRITTEN_IN = "#e8590c";
   const existing = [

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Excalidraw,
   CaptureUpdateAction,
@@ -99,6 +99,26 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   const pointerDown = useRef(false);
   /** Aborts the AI request in flight, so Cancel actually stops the wait. */
   const aiAbort = useRef<AbortController | null>(null);
+
+  /**
+   * Abort whatever is in flight when the board goes away.
+   *
+   * Nothing did this, and the AI runs outlive the component: leaving by the
+   * browser's Back button after arriving through a next/link is a client-side
+   * unmount, so the fetch is not cancelled the way a full page load cancels it.
+   * The run then lands on a canvas that is gone, commits to it, and publishes
+   * the result, which arms the collab hook's offline retry chain against a
+   * channel that has already been removed. Excalidraw swaps in a fresh Scene on
+   * unmount and updateScene does not object, so nothing throws to stop any of
+   * it.
+   */
+  useEffect(
+    () => () => {
+      aiAbort.current?.abort();
+      aiAbort.current = null;
+    },
+    [],
+  );
   const lastLocalVersion = useRef(-1);
 
   const onRemoteScene = useCallback(

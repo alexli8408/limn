@@ -233,13 +233,23 @@ export function planDiagram(
     // ordinary one keeps the sketch's own ink.
     const palette = PALETTE[node.emphasis as keyof typeof PALETTE];
     const colors = palette ?? ink;
-    // Emphasis is a stroke, not a repaint. PALETTE's fills are Excalidraw's own
-    // pale blue and red tints, so applying one in preserve mode hands back a
-    // blue box over a red sketch. sourceBackground is only populated in preserve
-    // mode; a recomposed diagram has no fill of the author's to keep.
-    const background = palette
-      ? (sourceBackground.get(node.id) ?? palette.background)
-      : colors.background;
+    /**
+     * Emphasis is a stroke, not a repaint. PALETTE's fills are Excalidraw's own
+     * pale blue and red tints, so applying one in preserve mode hands back a
+     * blue box over a red sketch. sourceBackground is only populated in preserve
+     * mode; a recomposed diagram has no fill of the author's to keep.
+     *
+     * The author's fill has to be consulted first in both branches, not only
+     * the emphasised one. It used to be read inside `palette ? …`, so the
+     * ordinary case fell through to the scene-wide majority. "normal" is the
+     * schema default and what the model is told to use, so the branch that lost
+     * the fill was the common one: a single filled box in an otherwise unfilled
+     * sketch came back transparent, and its original had already been
+     * tombstoned. It went the other way too, painting a transparent node in the
+     * majority colour when most of the board was filled.
+     */
+    const background =
+      sourceBackground.get(node.id) ?? (palette ? palette.background : colors.background);
     skeletons.push({
       type: node.shape,
       id: elementId(node.id),
