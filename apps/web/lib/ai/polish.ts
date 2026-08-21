@@ -6,6 +6,7 @@ import {
   recognizeStroke,
   rotate,
   type Box,
+  type LineFit,
   type Point,
 } from "@limn/shapes";
 import type { SyncElement } from "@limn/protocol";
@@ -33,8 +34,11 @@ import type { PolishGroup, PolishOp } from "./schema";
  * all. Element count out equals element count in, always.
  */
 
+/** Anything carrying Excalidraw's geometry fields. A SyncElement or a Draft. */
+type Geometric = Record<string, unknown>;
+
 /** Whatever we are part-way through editing. Same opaque shape as SyncElement. */
-type Draft = Record<string, unknown> & { id: string };
+type Draft = Geometric & { id: string };
 
 interface Member {
   id: string;
@@ -93,11 +97,47 @@ const ANGLE_SNAP = (8 * Math.PI) / 180;
 const CLOSED_GAP_RATIO = 0.22;
 
 /**
- * Mean perpendicular error over the stroke's diagonal, past which the bend is
- * the point of the stroke. A full circle scores about 0.32 here, a hand-drawn
- * line with a few pixels of wobble under 0.05.
+ * Mean perpendicular error over the stroke's diagonal, under which the stroke is
+ * near enough straight whatever shape the error takes.
+ *
+ * This sat at 0.12 for a while, on the grounds that a full circle scores about
+ * 0.32. A circle never reaches this check, CLOSED_GAP_RATIO turns it away first,
+ * so the number was calibrated against a case the guard has never once seen.
+ * What does reach it is an OPEN arc, and those score nowhere near as high.
+ * Measured on real arcs of 186px chord: 30 degrees scores 0.018, 60 scores
+ * 0.036, 90 scores 0.055, and 137, an unmistakable rainbow with a 63px sagitta,
+ * only 0.089. Every one of them came back as two points. Sitting between the 30
+ * and the 60 leaves a lazy line straightenable and puts a real bend above it.
  */
-const STRAIGHT_RESIDUAL = 0.12;
+const STRAIGHT_RESIDUAL = 0.035;
+
+/**
+ * Past STRAIGHT_RESIDUAL the shape of the error decides, because the size of it
+ * on its own is scale-blind: a 40px stroke with 4px of shake in it scores about
+ * the same as a wide gentle arch. A bow leaves its own best fit, runs to one
+ * side, and comes back, so the side it sits on changes exactly twice. Wobble
+ * crosses over and back again and again. More changes than this is wobble.
+ */
+const BOW_SIDE_CHANGES = 2;
+
+/**
+ * Offsets under this share of the widest one count as sitting on the line rather
+ * than either side of it. Without the dead band the jitter where a shakily drawn
+ * bow crosses its own fit counts as several changes of side, and the bow reads
+ * as wobble.
+ */
+const SIDE_DEADBAND = 0.2;
+
+/**
+ * Past this nothing is straightened whatever shape the error takes.
+ *
+ * The side test above waves wobble through however deep it gets, because deep
+ * wobble still alternates sides, and a stroke that strays an eighth of its own
+ * length off the line it is meant to be has stopped being a shaky line and
+ * become a scribble. The mean error is roughly the depth of the teeth over the
+ * run, so this catches a zigzag once its teeth pass about 12% of its length.
+ */
+const WOBBLE_RESIDUAL = 0.12;
 
 /**
  * Below this the recogniser is guessing. Rewriting a deliberate squiggle into a
@@ -132,7 +172,7 @@ const round = (v: number): number => Math.round(v);
 
 const nonce = (): number => Math.floor(Math.random() * 2 ** 31);
 
-function boxOf(el: Draft): Box | null {
+function boxOf(el: Geometric): Box | null {
   const x = Number(el.x);
   const y = Number(el.y);
   const width = Number(el.width ?? 0);
@@ -168,8 +208,84 @@ function boxOf(el: Draft): Box | null {
   return { x: x + minX, y: y + minY, width: maxX - minX, height: maxY - minY };
 }
 
+/**
+ * What the element actually covers on the canvas, rotation included.
+ *
+ * x, y, width and height describe the element before it was turned, and
+ * Excalidraw turns it about the centre of that box. So for anything tilted they
+ * are not the edges anyone can see: a 200 by 40 bar at 45 degrees reads as 200
+ * wide and 40 tall while covering a 170 square. Aligning to the untilted numbers
+ * put that bar's visible top 65px above the edge everything else shared, which
+ * is not a subtle miss on a screen someone is filming.
+ *
+ * Not exotic either: Snap writes an angle onto any rectangle or ellipse more
+ * than 8 degrees off axis, photo trace does the same, and regularize below
+ * deliberately leaves a 45 degree shape at 45 degrees.
+ *
+ * Exported because BoardCanvas has to describe these same boxes to Gemini before
+ * we edit them here, and a second copy of this over there drifts from this one.
+ */
+export function visualBox(el: Geometric): Box | null {
+  const box = boxOf(el);
+  if (!box) return null;
+
+  const angle = Number(el.angle);
+  if (!Number.isFinite(angle) || angle === 0) return box;
+
+  // Rotation moves the edges and leaves the middle alone, so everything below is
+  // measured out from this one point.
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  /**
+   * A stroke is its ink, not the box drawn round it. Turning the box instead
+   * claims the corners the ink never reached, and a diagonal stroke is nearly
+   * all corner: a 200px line at 45 degrees would report a 141px square when it
+   * covers a line. So turn the points and measure those.
+   */
+  const points = pointsOf(el);
+  if (points) {
+    const x = Number(el.x);
+    const y = Number(el.y);
+    return bbox(points.map((p) => rotate([x + p[0], y + p[1]], angle, [cx, cy])));
+  }
+
+  const cos = Math.abs(Math.cos(angle));
+  const sin = Math.abs(Math.sin(angle));
+  const w = box.width / 2;
+  const h = box.height / 2;
+
+  /**
+   * Three shapes reach their widest point in three different places, which is
+   * why Excalidraw's own bounds carry three formulas rather than one.
+   *
+   * A rectangle is widest at a corner, so both turned sides add up. An ellipse
+   * has no corner and is widest where its tangent stands vertical, which is a
+   * hypotenuse and always the smaller number. A diamond's vertices are the
+   * midpoints of its box's edges, so exactly one of them is the widest point and
+   * there is nothing to add to it.
+   *
+   * Measuring all three as rectangles read a 200 by 40 ellipse at 45 degrees as
+   * 13px wider on every side than it draws, and a misplaced edge is the one
+   * thing this function exists to prevent.
+   */
+  let halfW: number;
+  let halfH: number;
+  if (el.type === "ellipse") {
+    halfW = Math.hypot(w * cos, h * sin);
+    halfH = Math.hypot(h * cos, w * sin);
+  } else if (el.type === "diamond") {
+    halfW = Math.max(w * cos, h * sin);
+    halfH = Math.max(h * cos, w * sin);
+  } else {
+    halfW = w * cos + h * sin;
+    halfH = w * sin + h * cos;
+  }
+  return { x: cx - halfW, y: cy - halfH, width: halfW * 2, height: halfH * 2 };
+}
+
 /** Element-local stroke points, or null for anything that is not a stroke. */
-function pointsOf(el: Draft): Point[] | null {
+function pointsOf(el: Geometric): Point[] | null {
   const raw = el.points;
   if (!Array.isArray(raw) || raw.length < 2) return null;
   const points: Point[] = [];
@@ -254,7 +370,7 @@ export function polishSketch(
    * of the container's geometry, and aligning it separately tears the label out
    * of the box it labels.
    */
-  const moveTo = (draft: Draft, x: number, y: number): void => {
+  const moveTo = (draft: Draft, x: number, y: number, carryText = true): void => {
     const fromX = Number(draft.x);
     const fromY = Number(draft.y);
     if (!Number.isFinite(fromX) || !Number.isFinite(fromY)) return;
@@ -270,6 +386,11 @@ export function polishSketch(
     if (dx === 0 && dy === 0) return;
     draft.x = round(fromX + dx);
     draft.y = round(fromY + dy);
+    // A resize about the centre translates the box to keep that centre still, so
+    // the container moves but the middle of it does not, and the label sitting in
+    // that middle must not move either. Carrying it there slid the label of a
+    // shrunk box halfway out through its own edge.
+    if (!carryText) return;
     for (const id of boundTextIds(draft)) {
       const text = draftOf(id);
       if (!text) continue;
@@ -288,12 +409,12 @@ export function polishSketch(
    * offsets from it, so a points array that does not start at [0, 0] renders the
    * stroke somewhere other than where its own box says it is.
    */
-  const setPoints = (draft: Draft, points: readonly Point[]): void => {
+  const setPoints = (draft: Draft, points: readonly Point[], carryText = true): void => {
     const first = points[0];
     if (!first || points.length < 2) return;
     const local = points.map((p) => [round(p[0] - first[0]), round(p[1] - first[1])] as Point);
     const from = boxOf(draft);
-    if (from) moveTo(draft, from.x + first[0], from.y + first[1]);
+    if (from) moveTo(draft, from.x + first[0], from.y + first[1], carryText);
     draft.points = local.map((p) => [p[0], p[1]]);
     const span = bbox(local);
     draft.width = round(span.width);
@@ -325,16 +446,19 @@ export function polishSketch(
       const sy = span.height > 0.5 ? h / span.height : 1;
       const cx = span.x + span.width / 2;
       const cy = span.y + span.height / 2;
+      // Scaled about the centre, so the centre is where it was and any label
+      // anchored there stays put. Hence carryText false, same as below.
       setPoints(
         draft,
         points.map((p) => [(p[0] - cx) * sx + cx, (p[1] - cy) * sy + cy] as Point),
+        false,
       );
       return;
     }
 
     draft.width = w;
     draft.height = h;
-    moveTo(draft, box.x + (box.width - w) / 2, box.y + (box.height - h) / 2);
+    moveTo(draft, box.x + (box.width - w) / 2, box.y + (box.height - h) / 2, false);
   };
 
   let changedGroups = 0;
@@ -412,6 +536,14 @@ export function polishSketch(
   return { elements: out, changed, groups: changedGroups };
 }
 
+/**
+ * No carryText here on purpose, though moveTo and setPoints both take one.
+ *
+ * Leaving a bound label behind is only ever right for a move that keeps the
+ * centre still, and resize is the only such move. Every op below moves an
+ * element somewhere else, where the label has to follow or it is torn out of the
+ * box it names, so none of them are given the flag that would let them drop it.
+ */
 interface Ops {
   moveTo: (draft: Draft, x: number, y: number) => void;
   setPoints: (draft: Draft, points: readonly Point[]) => void;
@@ -420,7 +552,13 @@ interface Ops {
 
 interface Placed {
   member: Member;
+  /** The edges anyone can see, rotation included. What a shared edge is measured on. */
   box: Box;
+  /**
+   * The untilted box: the frame moveTo and resize write in, and the size an
+   * element has in its own right.
+   */
+  raw: Box;
 }
 
 /** Members that can be moved and have a box to move, in scene order. */
@@ -428,10 +566,23 @@ function placed(members: readonly Member[]): Placed[] {
   const out: Placed[] = [];
   for (const member of members) {
     if (!member.movable) continue;
-    const box = boxOf(member.draft);
-    if (box) out.push({ member, box });
+    const raw = boxOf(member.draft);
+    const box = visualBox(member.draft);
+    if (raw && box) out.push({ member, box, raw });
   }
   return out;
+}
+
+/**
+ * Moves a member so its VISIBLE box lands at x, y.
+ *
+ * moveTo writes the untilted frame, and the two boxes share a centre, so the
+ * delta that puts one edge where we want it is the same delta for both. Every
+ * caller here is reasoning about edges on screen, so none of them should have to
+ * know which frame they are in.
+ */
+function place(ops: Ops, entry: Placed, x: number, y: number): void {
+  ops.moveTo(entry.member.draft, entry.raw.x + (x - entry.box.x), entry.raw.y + (y - entry.box.y));
 }
 
 function median(values: readonly number[]): number {
@@ -485,27 +636,28 @@ function align(op: PolishOp, members: readonly Member[], ops: Ops): void {
   const top = Math.min(...boxes.map((b) => b.box.y));
   const bottom = Math.max(...boxes.map((b) => b.box.y + b.box.height));
 
-  for (const { member, box } of boxes) {
+  for (const entry of boxes) {
+    const box = entry.box;
     switch (op) {
       case "align-left":
-        ops.moveTo(member.draft, left, box.y);
+        place(ops, entry, left, box.y);
         break;
       case "align-right":
-        ops.moveTo(member.draft, right - box.width, box.y);
+        place(ops, entry, right - box.width, box.y);
         break;
       case "align-center-x":
         // The group's bounding centre, not the mean of the members' centres: the
         // mean shifts toward whichever side happens to hold more elements.
-        ops.moveTo(member.draft, (left + right) / 2 - box.width / 2, box.y);
+        place(ops, entry, (left + right) / 2 - box.width / 2, box.y);
         break;
       case "align-top":
-        ops.moveTo(member.draft, box.x, top);
+        place(ops, entry, box.x, top);
         break;
       case "align-bottom":
-        ops.moveTo(member.draft, box.x, bottom - box.height);
+        place(ops, entry, box.x, bottom - box.height);
         break;
       case "align-center-y":
-        ops.moveTo(member.draft, box.x, (top + bottom) / 2 - box.height / 2);
+        place(ops, entry, box.x, (top + bottom) / 2 - box.height / 2);
         break;
       default:
         return;
@@ -537,8 +689,9 @@ function distribute(members: readonly Member[], axis: "x" | "y", ops: Ops): void
     const entry = boxes[i];
     if (!entry) continue;
     const position = cursor + gap;
-    ops.moveTo(
-      entry.member.draft,
+    place(
+      ops,
+      entry,
       axis === "x" ? position : entry.box.x,
       axis === "x" ? entry.box.y : position,
     );
@@ -566,21 +719,30 @@ function equalizeSize(members: readonly Member[], ops: Ops): void {
    * are separated and each agrees with its own: lines scale uniformly onto a
    * median length, which leaves vertical vertical, and boxes keep the per-axis
    * median they always had.
+   *
+   * Both are judged on the untilted box, and so is every median below. resize
+   * writes width and height, which are what an element measures before it is
+   * turned, so a median taken off the turned extents gets written into a frame it
+   * was never measured in: a 200 by 40 bar at 45 degrees covers a 170 square, and
+   * sizing it to 170 leaves the next run measuring 148 and sizing it again, on and
+   * on. It would also read that bar as a solid rather than the line it plainly is.
+   * A tilt decides where a member sits, which is place()'s problem, not how big it
+   * is in its own frame.
    */
-  const oneDimensional = ({ box }: Placed): boolean =>
-    Math.min(box.width, box.height) < LINE_ASPECT * Math.max(box.width, box.height);
+  const oneDimensional = ({ raw }: Placed): boolean =>
+    Math.min(raw.width, raw.height) < LINE_ASPECT * Math.max(raw.width, raw.height);
 
   const lines = boxes.filter(oneDimensional);
   const solids = boxes.filter((b) => !oneDimensional(b));
 
   if (lines.length >= 2) {
-    const target = median(lines.map(({ box }) => Math.hypot(box.width, box.height)));
+    const target = median(lines.map(({ raw }) => Math.hypot(raw.width, raw.height)));
     if (target >= 1) {
-      for (const { member, box } of lines) {
-        const length = Math.hypot(box.width, box.height);
+      for (const { member, raw } of lines) {
+        const length = Math.hypot(raw.width, raw.height);
         if (length < 1) continue;
         const scale = target / length;
-        ops.resize(member.draft, box.width * scale, box.height * scale);
+        ops.resize(member.draft, raw.width * scale, raw.height * scale);
       }
     }
   }
@@ -588,13 +750,46 @@ function equalizeSize(members: readonly Member[], ops: Ops): void {
   if (solids.length >= 2) {
     // Median rather than mean, so one oversized member does not inflate the
     // whole group. The align engine sizes its tolerance off a median too.
-    const width = median(solids.map((b) => b.box.width));
-    const height = median(solids.map((b) => b.box.height));
+    const width = median(solids.map((b) => b.raw.width));
+    const height = median(solids.map((b) => b.raw.height));
     if (width < 1 && height < 1) return;
-    for (const { member, box } of solids) {
-      ops.resize(member.draft, width < 1 ? box.width : width, height < 1 ? box.height : height);
+    for (const { member, raw } of solids) {
+      ops.resize(member.draft, width < 1 ? raw.width : width, height < 1 ? raw.height : height);
     }
   }
+}
+
+/**
+ * How many times the stroke swaps which side of its own best fit it is on.
+ *
+ * The measure fitLine reports is a mean distance, and a distance says nothing
+ * about direction: a short stroke with a shaky hand in it scores the same as a
+ * wide gentle arch. This is the part that tells them apart. A bow is on one side
+ * the whole way through its middle and on the other at both ends, so it swaps
+ * twice however wide or narrow it is drawn. Wobble swaps every few points.
+ */
+function sideChanges(points: readonly Point[], line: LineFit): number {
+  const [ox, oy] = line.origin;
+  const [vx, vy] = line.direction;
+  const offsets = points.map(([x, y]) => (x - ox) * -vy + (y - oy) * vx);
+
+  let widest = 0;
+  for (const offset of offsets) widest = Math.max(widest, Math.abs(offset));
+  if (widest <= 0) return 0;
+
+  const deadband = widest * SIDE_DEADBAND;
+  let changes = 0;
+  let side = 0;
+  for (const offset of offsets) {
+    // Points hugging the fit have no side worth counting. Skipping them is what
+    // stops the jitter where a shakily drawn bow crosses its own fit from
+    // reading as four or five swaps and losing the bow.
+    if (Math.abs(offset) < deadband) continue;
+    const next = offset > 0 ? 1 : -1;
+    if (side !== 0 && next !== side) changes++;
+    side = next;
+  }
+  return changes;
 }
 
 /** A wobbly stroke becomes the straight segment it was aiming at. */
@@ -612,7 +807,8 @@ function straighten(member: Member, ops: Ops): void {
   // segment where the window was, which is exactly the destruction this file
   // exists to avoid, so a stroke has to look like a segment before it is turned
   // into one. Two ways it can fail to: it comes back to where it started, or it
-  // sits too far off its own best fit for the bend to be an accident.
+  // bends, and a bend is not just a matter of how far off its own best fit the
+  // stroke strays, see STRAIGHT_RESIDUAL, but of whether it strays to one side.
   const span = pathLength(points);
   if (span <= 0 || dist(from, to) / span < CLOSED_GAP_RATIO) return;
 
@@ -623,7 +819,13 @@ function straighten(member: Member, ops: Ops): void {
   // Total least squares, not first-point-to-last: a stroke that overshoots at
   // one end would otherwise tilt the whole segment to chase the overshoot.
   const line = fitLine(points);
-  if (line.residual / diagonal > STRAIGHT_RESIDUAL) return;
+  const error = line.residual / diagonal;
+  if (error > WOBBLE_RESIDUAL) return;
+  // Far enough off the line to be doing something, and doing it to one side the
+  // whole way, makes this an arch or a smile. Flattening that is the same
+  // destruction as flattening the window, just harder to spot afterwards: a
+  // 137 degree rainbow came back as two points and nothing looked broken.
+  if (error > STRAIGHT_RESIDUAL && sideChanges(points, line) <= BOW_SIDE_CHANGES) return;
 
   const forward = dist(from, line.start) <= dist(from, line.end);
   const start = forward ? line.start : line.end;
