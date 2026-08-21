@@ -13,6 +13,7 @@ import {
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { Role, SyncElement } from "@limn/protocol";
 import { useCollab } from "@/lib/collab/useCollab";
+import { useBoardThumbnail } from "@/lib/board/useBoardThumbnail";
 import { useStrokeBeautify } from "@/lib/beautify/useStrokeBeautify";
 import { compileDiagram, inkOf, tombstone } from "@/lib/ai/compile";
 import { autoTitleBoard } from "@/app/actions";
@@ -181,6 +182,13 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   );
 
   flushRef.current = collab.flush;
+
+  useBoardThumbnail({
+    boardId: props.boardId,
+    api,
+    isWriter,
+    savedVersion,
+  });
 
   const beautify = useStrokeBeautify({
     enabled: beautifyOn && !readOnly,

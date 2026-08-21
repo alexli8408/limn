@@ -18,7 +18,7 @@ export default async function DashboardPage() {
   // would hide boards shared with this user.
   const { data: boards, error } = await supabase
     .from("boards")
-    .select("id, title, element_count, updated_at, owner_id, visibility")
+    .select("id, title, element_count, updated_at, owner_id, visibility, thumbnail_url")
     .order("updated_at", { ascending: false })
     .limit(60);
 
@@ -116,6 +116,7 @@ interface BoardSummary {
   element_count: number;
   updated_at: string;
   visibility: "private" | "link" | "public";
+  thumbnail_url: string | null;
 }
 
 function Section({
@@ -140,28 +141,53 @@ function Section({
         {boards.map((board) => (
           <li
             key={board.id}
-            className="group relative flex flex-col border border-[var(--ink-line)] bg-[var(--ink-surface)] transition hover:border-[var(--ink-accent)]"
+            className="group flex flex-col overflow-hidden border border-[var(--ink-line)] bg-[var(--ink-surface)] transition hover:border-[var(--ink-accent)]"
           >
-            <Link href={`/board/${board.id}`} className="block flex-1 p-4 pb-2">
-              <span className="mt-1.5 block font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-                {board.element_count} elements ·{" "}
-                {new Date(board.updated_at).toLocaleDateString()}
-                {/* The column was already being selected and thrown away, so a
-                    board you had deliberately made private looked identical to
-                    one anyone with the link could open. */}
-                {board.visibility !== "link" && ` · ${board.visibility}`}
-              </span>
+            {/* The picture is the fastest way to tell one board from another,
+                which a grid of text cards never was. Decorative, so it carries
+                an empty alt rather than repeating the title beneath it. */}
+            <Link href={`/board/${board.id}`} className="block">
+              <div className="aspect-[16/10] overflow-hidden border-b border-[var(--ink-line)] bg-[var(--ink-raised)]">
+                {board.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={board.thumbnail_url}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover opacity-90 transition group-hover:opacity-100"
+                  />
+                ) : (
+                  // A board with nothing on it has no picture to show. The
+                  // paper texture says "blank board" where an empty box would
+                  // just read as a thumbnail that failed to load.
+                  <div className="relative grid h-full w-full place-items-center">
+                    <div className="draft-grid" aria-hidden />
+                    <span className="relative font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-ghost)]">
+                      empty
+                    </span>
+                  </div>
+                )}
+              </div>
             </Link>
 
-            {/* Title sits outside the Link so a rename click cannot navigate. */}
-            <div className="pointer-events-none absolute inset-x-4 top-4">
-              <div className="pointer-events-auto">
-                <BoardTitle
-                  boardId={board.id}
-                  title={board.title}
-                  className="w-full text-sm font-medium text-[var(--ink-text)]"
-                />
-              </div>
+            <div className="flex flex-1 flex-col gap-1 p-3">
+              {/* Outside the Link, so a rename click cannot navigate away. */}
+              <BoardTitle
+                boardId={board.id}
+                title={board.title}
+                className="w-full text-sm font-medium text-[var(--ink-text)]"
+              />
+              <Link
+                href={`/board/${board.id}`}
+                className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)] transition hover:text-[var(--ink-dim)]"
+              >
+                {board.element_count} elements ·{" "}
+                {new Date(board.updated_at).toLocaleDateString()}
+                {/* The column was already selected and thrown away, so a board
+                    you had deliberately made private looked identical to one
+                    anyone with the link could open. */}
+                {board.visibility !== "link" && ` · ${board.visibility}`}
+              </Link>
             </div>
 
             <div className="flex justify-end border-t border-[var(--ink-line)] px-2 py-1.5">
