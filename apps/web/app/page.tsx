@@ -26,14 +26,14 @@ const SPEC = [
   {
     key: "as you draw",
     title: "Strokes snap themselves",
-    body: "Every freehand stroke is classified the moment you lift the pen and replaced with a real rectangle, ellipse, diamond or arrow. Same frame, in your browser, no round trip. It declines rather than guess, and one undo gives your wobble back.",
+    body: "Every freehand stroke is classified the moment you lift the pen and replaced with a real rectangle, ellipse, diamond or arrow. Same frame, in your browser, no round trip. It declines rather than guessing, and one undo gives your wobble back.",
     value: "95.8%",
     unit: "accuracy",
   },
   {
     key: "together",
     title: "Invite anyone, draw at once",
-    body: "Send someone the board link. They sign in, appear on the canvas with a named cursor, and every stroke lands on both screens as it is drawn. Sync rides Supabase Realtime, which has nowhere to run code, so convergence, saving and catch-up all happen peer-side: concurrent edits merge under a total order, and the peers elect one of themselves to persist the board.",
+    body: "Send someone the board link. They sign in, appear on the canvas with a named cursor, and every stroke lands on both screens as it is drawn. There is no sync server: the browsers merge each other's edits directly, and pick one of themselves to do the saving.",
     value: "0",
     unit: "servers",
   },
@@ -134,7 +134,7 @@ export default async function LandingPage() {
             {SPEC.map((row) => (
               <div className="spec-row" key={row.title}>
                 <p className="spec-key">{row.key}</p>
-                <div>
+                <div className="spec-body">
                   <h2>{row.title}</h2>
                   <p>{row.body}</p>
                 </div>

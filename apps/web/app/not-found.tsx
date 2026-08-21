@@ -24,7 +24,7 @@ export default function NotFound() {
         <main className="flex flex-1 items-center">
           <div className="max-w-lg py-16">
             <p className="eyebrow">nothing here</p>
-            <h1 className="title text-balance">
+            <h1 className="mb-3 text-[1.9rem] font-[780] leading-[1.15] tracking-[-0.03em] text-balance">
               That board is gone, or the link{" "}
               <span className="text-[var(--ink-accent)]">pointing at it was reset.</span>
             </h1>

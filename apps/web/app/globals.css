@@ -3,12 +3,19 @@
 @import "./landing.css";
 
 :root {
-  color-scheme: light dark;
+  /* Not "light dark". The product is dark only, and leaving this to the OS
+     meant a visitor in light mode got a light scrollbar, pale yellow Chrome
+     autofill on the sign-in fields and a stock light checkbox in the AI panel,
+     all painted over a #07080c page. */
+  color-scheme: dark;
 }
 
 html,
 body {
   height: 100%;
+  /* dvh so the page is not partly behind mobile browser chrome. The 100% above
+     stays as the fallback for anything that does not know the unit. */
+  height: 100dvh;
 }
 
 body {

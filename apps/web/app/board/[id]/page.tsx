@@ -36,7 +36,7 @@ function NoAccess({ linkWasReset }: { linkWasReset: boolean }) {
         <main className="flex flex-1 items-center">
           <div className="max-w-lg py-16">
             <p className="eyebrow">no access</p>
-            <h1 className="title text-balance">
+            <h1 className="mb-3 text-[1.9rem] font-[780] leading-[1.15] tracking-[-0.03em] text-balance">
               {linkWasReset ? (
                 <>
                   That share link{" "}

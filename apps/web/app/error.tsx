@@ -41,7 +41,7 @@ export default function Error({
         <main className="flex flex-1 items-center">
           <div className="max-w-lg py-16">
             <p className="eyebrow">that did not work</p>
-            <h1 className="title text-balance">
+            <h1 className="mb-3 text-[1.9rem] font-[780] leading-[1.15] tracking-[-0.03em] text-balance">
               Something broke on our side,{" "}
               <span className="text-[var(--ink-accent)]">not yours.</span>
             </h1>

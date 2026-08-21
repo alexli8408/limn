@@ -71,7 +71,7 @@ export default async function DashboardPage() {
         <main className="pb-24 pt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="title text-[var(--ink-text)]">Your boards</h1>
+              <h1 className="mb-3 text-[1.9rem] font-[780] leading-[1.15] tracking-[-0.03em] text-balance text-[var(--ink-text)]">Your boards</h1>
               <p className="mt-1.5 text-sm text-[var(--ink-dim)]">
                 {error
                   ? "Could not load your boards."

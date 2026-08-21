@@ -39,7 +39,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
         <main className="flex flex-1 items-center justify-center py-16">
           <div className="w-full max-w-sm">
             <p className="eyebrow">{invited ? "you were invited" : "welcome back"}</p>
-            <h1 className="title text-balance">
+            <h1 className="mb-3 text-[1.9rem] font-[780] leading-[1.15] tracking-[-0.03em] text-balance">
               {invited ? (
                 <>
                   Sign in to join{" "}

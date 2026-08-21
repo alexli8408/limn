@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  // Needed for the OG and Twitter image URLs to resolve to absolute addresses.
+  metadataBase: new URL("https://limn.axli.me"),
   // Just the name in the tab. The description below is what carries the
   // explanation into search results and link previews, so the title does not
   // have to do that job as well.
@@ -13,12 +15,15 @@ export const metadata: Metadata = {
     description: "Realtime collaborative whiteboard with stroke beautification.",
     type: "website",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // No maximumScale. Locking zoom is a WCAG 1.4.4 failure and it applied to the
+  // landing page, sign-in and the dashboard, none of which have any reason to
+  // stop someone zooming in on text.
   // One colour, not a light/dark pair. The app committed to a single dark
   // world, so following the viewer's preference here just paints the phone's
   // browser chrome white above a near-black page.

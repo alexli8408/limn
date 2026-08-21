@@ -10,388 +10,419 @@
  * which is the product's own material rather than a decorative glow.
  */
 
-.landing {
-  position: relative;
-  min-height: 100%;
-  background: var(--ink-void);
-  color: var(--ink-text);
-  font-family: var(--font-display);
-  overflow-x: hidden;
-}
+/*
+ * Everything below sits in @layer components on purpose.
+ *
+ * Tailwind v4 puts every utility in @layer utilities, and unlayered CSS beats
+ * layered CSS regardless of specificity. Imported unlayered, a plain rule like
+ * `.landing h1` silently outranked a `text-[1.75rem]` utility on the same
+ * element, which is how the sign-in heading ended up rendering at hero size and
+ * needed a `.landing h1.title` band-aid to get back. Layered, the utility wins,
+ * which is what anyone writing one expects.
+ */
+@layer components {
 
-.landing .paper {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 190vh;
-  pointer-events: none;
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: var(--grid-size) var(--grid-size);
-  /* Fades out downward so the grid reads as a surface the page sits on, not
-     as wallpaper running to the edge. */
-  mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 62%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 62%);
-}
+  .landing {
+    position: relative;
+    min-height: 100%;
+    background: var(--ink-void);
+    color: var(--ink-text);
+    font-family: var(--font-display);
+    overflow-x: hidden;
+  }
 
-.landing .shell {
-  position: relative;
-  max-width: 72rem;
-  margin: 0 auto;
-  padding-inline: 2.5rem;
-}
+  .landing .paper {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 190vh;
+    pointer-events: none;
+    /* Two grids, not one. The fine 26px cell alone reads as noise; the heavier
+       line every fifth cell is what makes it read as graph paper. */
+    background-image:
+      linear-gradient(var(--grid-line-major) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line-major) 1px, transparent 1px),
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size:
+      var(--grid-major) var(--grid-major),
+      var(--grid-major) var(--grid-major),
+      var(--grid-size) var(--grid-size),
+      var(--grid-size) var(--grid-size);
+    /* Fades out downward so the grid reads as a surface the page sits on, not
+       as wallpaper running to the edge. Held further down the page than before,
+       where it used to disappear above the counters strip. */
+    mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 85%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 85%);
+  }
 
-/* ---------- rule ---------- */
-
-.landing .rule {
-  border: 0;
-  border-top: 1px solid var(--ink-line);
-  margin: 0;
-}
-
-/* ---------- bar ---------- */
-
-.landing .bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-block: 1.5rem;
-}
-
-.landing .mark {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.landing .bar nav {
-  display: flex;
-  gap: 1.75rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.landing .bar a {
-  color: var(--ink-faint);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.landing .bar a:hover {
-  color: var(--ink-accent-hot);
-}
-
-/* ---------- hero ---------- */
-
-.landing .hero {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 4rem;
-  align-items: center;
-  padding-block: clamp(3.5rem, 9vw, 7rem);
-}
-
-.landing .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-accent);
-  margin: 0 0 1.5rem;
-}
-
-.landing h1 {
-  font-size: clamp(2.8rem, 6.8vw, 4.5rem);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  font-weight: 780;
-  margin: 0 0 1.75rem;
-  text-wrap: balance;
-}
-
-/* Flat, not a gradient. A solid accent line reads as a decision; a gradient
-   reads as a template. */
-.landing h1 span {
-  color: var(--ink-accent);
-}
-
-/* Sign-in and the dashboard reuse this shell for its paper, bar and rules, but
-   their headings are page titles rather than a hero. Without this they inherit
-   the hero scale above, which beats a utility class on specificity and wraps a
-   six-word title across three lines. */
-.landing h1.title {
-  font-size: clamp(1.6rem, 3.2vw, 2.05rem);
-  line-height: 1.15;
-  letter-spacing: -0.03em;
-  margin: 0 0 0.75rem;
-}
-
-.landing .lede {
-  font-size: 1.0625rem;
-  line-height: 1.62;
-  color: var(--ink-dim);
-  max-width: 33rem;
-  margin: 0 0 2.25rem;
-  text-wrap: pretty;
-}
-
-.landing .cta {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-}
-
-/* Used on both a submit button and a link, depending on whether there is a
-   session to create a board in, so it has to carry the anchor resets too. */
-.landing .primary {
-  display: inline-block;
-  font: inherit;
-  font-size: 0.9375rem;
-  font-weight: 640;
-  letter-spacing: 0.01em;
-  color: #0b0813;
-  text-decoration: none;
-  background: var(--ink-accent);
-  border: 0;
-  border-radius: 3px;
-  padding: 0.85rem 1.9rem;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.landing .primary:hover {
-  background: var(--ink-accent-hot);
-}
-
-.landing .primary:focus-visible {
-  outline: 2px solid var(--ink-accent-hot);
-  outline-offset: 3px;
-}
-
-.landing .aside {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  color: var(--ink-faint);
-}
-
-/* ---------- the stroke specimen ---------- */
-
-.landing .morph {
-  margin: 0;
-  border: 1px solid var(--ink-line);
-  background: var(--ink-surface);
-}
-
-.landing .morph .specimen-head {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--ink-line);
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.landing .morph svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  padding: 1.75rem;
-  box-sizing: border-box;
-}
-
-.landing .morph figcaption {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.7rem 1rem;
-  border-top: 1px solid var(--ink-line);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  color: var(--ink-dim);
-}
-
-.landing .morph .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ink-accent);
-  transition: opacity 0.25s;
-}
-
-/* ---------- counters, one strip ---------- */
-
-.landing .counters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3.5rem;
-  padding-block: 1.5rem;
-  border-top: 1px solid var(--ink-line);
-  border-bottom: 1px solid var(--ink-line);
-}
-
-.landing .counters .value {
-  font-family: var(--font-mono);
-  font-size: 1.35rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.landing .counters .label {
-  display: block;
-  margin-top: 0.15rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-/* ---------- spec sheet, not cards ---------- */
-
-.landing .spec {
-  padding-block: clamp(3rem, 7vw, 5rem);
-}
-
-.landing .spec-row {
-  display: grid;
-  grid-template-columns: 11rem 1fr 9rem;
-  gap: 2.5rem;
-  align-items: start;
-  padding-block: 2.25rem;
-  border-bottom: 1px solid var(--ink-line);
-}
-
-.landing .spec-row:first-child {
-  border-top: 1px solid var(--ink-line);
-}
-
-.landing .spec-key {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  padding-top: 0.3rem;
-}
-
-.landing .spec-row h2 {
-  font-size: 1.15rem;
-  letter-spacing: -0.02em;
-  font-weight: 660;
-  margin: 0 0 0.55rem;
-}
-
-.landing .spec-row p {
-  font-size: 0.9375rem;
-  line-height: 1.62;
-  color: var(--ink-dim);
-  margin: 0;
-  max-width: 40rem;
-  text-wrap: pretty;
-}
-
-.landing .spec-value {
-  text-align: right;
-  padding-top: 0.15rem;
-}
-
-.landing .spec-value strong {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--ink-accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.landing .spec-value span {
-  display: block;
-  margin-top: 0.2rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-/* ---------- closer ---------- */
-
-.landing .closer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  flex-wrap: wrap;
-  padding-block: clamp(3rem, 6vw, 4.5rem);
-  border-top: 1px solid var(--ink-line);
-}
-
-.landing .closer h2 {
-  font-size: clamp(1.5rem, 3.4vw, 2.15rem);
-  letter-spacing: -0.03em;
-  font-weight: 700;
-  margin: 0;
-  max-width: 26rem;
-  text-wrap: balance;
-}
-
-/* ---------- foot ---------- */
-
-.landing .foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  padding-block: 2rem 3rem;
-  border-top: 1px solid var(--ink-line);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  color: var(--ink-faint);
-}
-
-/* ---------- narrow ---------- */
-
-@media (max-width: 900px) {
   .landing .shell {
-    padding-inline: 1.35rem;
+    position: relative;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding-inline: 2.5rem;
   }
-  .landing .hero {
-    grid-template-columns: 1fr;
-    gap: 2.75rem;
-  }
-  .landing .spec-row {
-    grid-template-columns: 1fr;
-    gap: 0.9rem;
-  }
-  .landing .spec-value {
-    text-align: left;
-  }
-  .landing .spec-value strong {
-    display: inline;
-  }
-  .landing .spec-value span {
-    display: inline;
-    margin-left: 0.5rem;
-  }
-  .landing .counters {
-    gap: 2rem;
-  }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .landing * {
-    transition: none !important;
-    animation: none !important;
+  /* ---------- rule ---------- */
+
+  .landing .rule {
+    border: 0;
+    border-top: 1px solid var(--ink-line);
+    margin: 0;
+  }
+
+  /* ---------- bar ---------- */
+
+  .landing .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: 1.5rem;
+  }
+
+  .landing .mark {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .landing .bar nav {
+    display: flex;
+    gap: 1.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .landing .bar a {
+    color: var(--ink-faint);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .landing .bar a:hover {
+    color: var(--ink-accent-hot);
+  }
+
+  /* ---------- hero ---------- */
+
+  .landing .hero {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 4rem;
+    align-items: center;
+    padding-block: clamp(3.5rem, 9vw, 7rem);
+  }
+
+  .landing .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-accent);
+    margin: 0 0 1.5rem;
+  }
+
+  .landing h1 {
+    font-size: clamp(2.8rem, 6.8vw, 4.5rem);
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+    font-weight: 780;
+    margin: 0 0 1.75rem;
+    text-wrap: balance;
+  }
+
+  /* Flat, not a gradient. A solid accent line reads as a decision; a gradient
+     reads as a template. */
+  .landing h1 span {
+    color: var(--ink-accent);
+  }
+
+
+  .landing .lede {
+    font-size: 1.0625rem;
+    line-height: 1.62;
+    color: var(--ink-dim);
+    max-width: 33rem;
+    margin: 0 0 2.25rem;
+    text-wrap: pretty;
+  }
+
+  .landing .cta {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  /* Used on both a submit button and a link, depending on whether there is a
+     session to create a board in, so it has to carry the anchor resets too. */
+  .landing .primary {
+    display: inline-block;
+    font: inherit;
+    font-size: 0.9375rem;
+    font-weight: 640;
+    letter-spacing: 0.01em;
+    color: #0b0813;
+    text-decoration: none;
+    background: var(--ink-accent);
+    border: 0;
+    border-radius: 3px;
+    padding: 0.85rem 1.9rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .landing .primary:hover {
+    background: var(--ink-accent-hot);
+  }
+
+  .landing .primary:focus-visible {
+    outline: 2px solid var(--ink-accent-hot);
+    outline-offset: 3px;
+  }
+
+  .landing .aside {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- the stroke specimen ---------- */
+
+  .landing .morph {
+    margin: 0;
+    border: 1px solid var(--ink-line);
+    background: var(--ink-surface);
+  }
+
+  .landing .morph .specimen-head {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--ink-line);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .landing .morph svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    padding: 1.75rem;
+    box-sizing: border-box;
+  }
+
+  .landing .morph figcaption {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 1rem;
+    border-top: 1px solid var(--ink-line);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-dim);
+  }
+
+  .landing .morph .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ink-accent);
+    transition: opacity 0.25s;
+  }
+
+  /* ---------- counters, one strip ---------- */
+
+  .landing .counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3.5rem;
+    padding-block: 1.5rem;
+    border-top: 1px solid var(--ink-line);
+    border-bottom: 1px solid var(--ink-line);
+  }
+
+  .landing .counters .value {
+    font-family: var(--font-mono);
+    font-size: 1.35rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .landing .counters .label {
+    display: block;
+    margin-top: 0.15rem;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- spec sheet, not cards ---------- */
+
+  .landing .spec {
+    padding-block: clamp(3rem, 7vw, 5rem);
+  }
+
+  .landing .spec-row {
+    display: grid;
+    grid-template-columns: 11rem 1fr 9rem;
+    gap: 2.5rem;
+    align-items: start;
+    padding-block: 2.25rem;
+    border-bottom: 1px solid var(--ink-line);
+  }
+
+  .landing .spec-row:first-child {
+    border-top: 1px solid var(--ink-line);
+  }
+
+  .landing .spec-key {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-top: 0.3rem;
+  }
+
+  .landing .spec-row h2 {
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+    font-weight: 660;
+    margin: 0 0 0.55rem;
+  }
+
+  .landing .spec-body p {
+    font-size: 0.9375rem;
+    line-height: 1.62;
+    color: var(--ink-dim);
+    margin: 0;
+    max-width: 40rem;
+    text-wrap: pretty;
+  }
+
+  .landing .spec-value {
+    text-align: right;
+    padding-top: 0.15rem;
+  }
+
+  .landing .spec-value strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--ink-accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .landing .spec-value span {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- closer ---------- */
+
+  .landing .closer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+    flex-wrap: wrap;
+    padding-block: clamp(3rem, 6vw, 4.5rem);
+    border-top: 1px solid var(--ink-line);
+  }
+
+  .landing .closer h2 {
+    font-size: clamp(1.5rem, 3.4vw, 2.15rem);
+    letter-spacing: -0.03em;
+    font-weight: 700;
+    margin: 0;
+    max-width: 26rem;
+    text-wrap: balance;
+  }
+
+  /* ---------- foot ---------- */
+
+  .landing .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding-block: 2rem 3rem;
+    border-top: 1px solid var(--ink-line);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- narrow ---------- */
+
+  @media (max-width: 900px) {
+    .landing .shell {
+      padding-inline: 1.35rem;
+    }
+    .landing .hero {
+      grid-template-columns: 1fr;
+      gap: 2.75rem;
+    }
+    .landing .spec-row {
+      grid-template-columns: 1fr;
+      gap: 0.9rem;
+    }
+    .landing .spec-value {
+      text-align: left;
+    }
+    .landing .spec-value strong {
+      display: inline;
+    }
+    .landing .spec-value span {
+      display: inline;
+      margin-left: 0.5rem;
+    }
+    .landing .counters {
+      gap: 2rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .landing * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+
+  /* ---------- shared interaction states ---------- */
+
+  /*
+   * Every input in the product killed its outline and signalled focus with a
+   * 1px border colour change, which is close to invisible and fails keyboard
+   * users outright. One ring, everywhere, on focus-visible only so a mouse
+   * click does not draw it.
+   */
+  .landing :is(a, button, input, textarea, select):focus-visible {
+    outline: 2px solid var(--ink-accent-hot);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .landing :is(button, input, textarea):disabled {
+    cursor: not-allowed;
+    color: var(--ink-ghost);
   }
 }

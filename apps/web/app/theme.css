@@ -22,7 +22,13 @@
 
   --ink-text: #e9ecf4;
   --ink-dim: #98a0b4;
-  --ink-faint: #5f6779;
+  /* Raised from #5f6779, which is 3.5:1 on --ink-void and fails WCAG AA. It
+     colours nearly every mono micro-label in the design, so the system's
+     signature text was also its least readable. This is 5.3:1. */
+  --ink-faint: #7b8397;
+  /* The old value, kept for hairlines and disabled glyphs, which are decoration
+     rather than text and do not carry a contrast requirement. */
+  --ink-ghost: #5f6779;
 
   /* One accent, flat. No gradients on type or buttons. */
   --ink-accent: #7c5cff;
@@ -39,19 +45,46 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* Graph paper. The product's own material, used as the page texture rather
-     than a decorative blur. */
+     than a decorative blur.
+     At the original 0.055 alpha this composited to 1.04:1 against the page and
+     effectively did not render at all, so the texture the radial blur was
+     replaced with was invisible. The second, heavier pair every fifth cell is
+     what makes it read as graph paper instead of as noise. */
   --grid-size: 26px;
-  --grid-line: rgba(124, 92, 255, 0.055);
+  --grid-major: 130px;
+  --grid-line: rgba(124, 92, 255, 0.11);
+  --grid-line-major: rgba(124, 92, 255, 0.16);
+}
+
+/*
+ * Tailwind v4 reads its scale from @theme, not from :root. Only the values that
+ * were actually disagreeing with the hand-written CSS are set here.
+ *
+ * --radius-sm existed as Tailwind's 0.125rem while .landing .primary used 3px,
+ * so a button and a panel sitting side by side had visibly different corners.
+ * --font-sans was Tailwind's default stack, which is why the board chrome did
+ * not match the landing page's type.
+ */
+@theme {
+  --radius-sm: 3px;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 /* Reusable drafting grid. Applied as a masked overlay so it fades out instead
-   of tiling to the edge of the viewport. */
-.draft-grid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: var(--grid-size) var(--grid-size);
+   of tiling to the edge of the viewport.
+   In @layer components so Tailwind utilities can still override it: unlayered
+   CSS beats layered CSS whatever the specificity, and Tailwind v4 puts every
+   utility in @layer utilities. */
+@layer components {
+  .draft-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+  }
 }
