@@ -126,6 +126,28 @@ exception when others then
   raise notice 'correctly blocked: %', sqlerrm;
 end $$;
 
+-- The same guard, approached from the one direction that used to walk straight
+-- past it. It decided whether to run by testing new.owner_id, the value after
+-- the update, so writing your own uid into that column switched off every check
+-- protecting it. One PATCH from anyone holding an editor link took the board,
+-- its snapshots and its collaborator list off the owner with no way back.
+\echo '--- and must NOT be able to make themselves the owner'
+do $$
+begin
+  -- The literal, not auth.uid(): the stubs do not grant `authenticated`
+  -- execute on the auth schema, so calling it here raises before the update
+  -- and the test would pass without ever exercising the guard.
+  update public.boards set owner_id = '22222222-2222-2222-2222-222222222222'::uuid;
+  raise notice 'UNEXPECTED: an editor took ownership of the board';
+exception when others then
+  raise notice 'correctly blocked: %', sqlerrm;
+end $$;
+
+\echo '--- the real owner still owns it (expect owner_id unchanged, editor role)'
+select owner_id = '11111111-1111-1111-1111-111111111111'::uuid as owner_intact
+from public.boards where id = :'board_id'::uuid;
+select public.board_role_for(:'board_id'::uuid) as role_after_attempt;
+
 reset role;
 
 -- ---------------------------------------------------------------------------
