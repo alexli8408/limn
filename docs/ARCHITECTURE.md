@@ -96,6 +96,22 @@ they are the writer. That is survivable **by design** rather than by luck:
 the loser's write is rejected as stale and retried against the current version
 instead of reverting the winner's save.
 
+### An election is not a guarantee
+
+The rule is a pure function of what peers say about themselves, and nothing
+checks that the winner then does the job. Malice is the least likely way that
+goes wrong. A writer in a background tab is the likely one: browsers throttle
+timers there to roughly once a minute, slower than the 20 s ceiling the writer
+depends on, so the tab someone left open in another window can end up
+responsible for saving a board they are actively drawing on in this one.
+
+So any peer that is editing will save the board itself if nobody has been seen
+to save it for 45 s, well over twice the ceiling. It is gated on an edit rather
+than on a timer, which is what makes it safe to leave on: a board nobody is
+drawing on needs no save and never reaches the check. Taking over costs nothing
+when it turns out to be unnecessary, because the write is an ordinary
+compare-and-swap and the loser adopts the winner's version.
+
 ### Two timers, not one
 
 The writer holds a debounce *and* a ceiling:

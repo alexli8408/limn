@@ -103,6 +103,24 @@ export interface CollabHandle {
 const OFFLINE_RETRY_MS = 1_000;
 
 /**
+ * How long a board may go unsaved, while being edited, before a peer that is
+ * not the writer saves it anyway.
+ *
+ * Election is a pure function of self-reported presence, so the writer is
+ * whoever claims the earliest joinedAt and nothing checks that they then do the
+ * job. Malice is the least likely way that happens. A writer in a background
+ * tab is the likely one: browsers throttle timers there to something like once
+ * a minute, which is slower than the ceiling the snapshot writer relies on, so
+ * the tab someone left open in another window becomes responsible for saving a
+ * board they are actively drawing on in this one.
+ *
+ * Well over twice SNAPSHOT_MAX_DELAY_MS, so a healthy writer is never raced.
+ * Taking over costs nothing when it turns out to be unnecessary: the write is
+ * an ordinary compare-and-swap and a loser adopts the winner's version.
+ */
+const STALE_WRITER_MS = 45_000;
+
+/**
  * Viewer cursors go out at 4/s, not at the editor's rate.
  *
  * An editor's cursor is a broadcast, which peers handle cheaply. A viewer has no
@@ -155,6 +173,16 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const [peerActivity, setPeerActivity] = useState<PeerActivity | null>(null);
   const [savedVersion, setSavedVersion] = useState(initialVersion);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  /**
+   * The last save anyone was seen to make, local or broadcast, for the
+   * stale-writer check in publishScene. A ref because that check runs on the
+   * hot path and must not make the scene depend on render timing.
+   */
+  const savedAtRef = useRef<number | null>(null);
+  const markSaved = useCallback((at: number) => {
+    savedAtRef.current = at;
+    setLastSavedAt(at);
+  }, []);
   /**
    * True while the scene is larger than MAX_ELEMENTS_PER_BOARD. Reported, not
    * enforced, see the note in publishScene. The ref shadows the state so the
@@ -273,7 +301,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         getScene: () => liveRef.current?.() ?? sceneRef.current,
         onSaved: (version, at) => {
           setSavedVersion(version);
-          setLastSavedAt(at);
+          markSaved(at);
           // Only announce over a joined socket. The first save can land before
           // the channel finishes joining, and send() on an unjoined channel
           // silently falls back to a REST post, which logs a deprecation warning
@@ -294,7 +322,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
           });
         },
       }),
-    [supabase, boardId, baseVersion, peerId],
+    [supabase, boardId, baseVersion, peerId, markSaved],
   );
 
   /* ---------------------------------------------------------------- */
@@ -409,13 +437,28 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         overCapacity.current = over;
         setAtCapacity(over);
       }
-      if (isWriterRef.current) snapshots.mark(elements);
+
+      /**
+       * Normally only the writer saves. The second clause is the watchdog: if
+       * the board is being edited and nobody has been seen to save it for
+       * STALE_WRITER_MS, this peer saves regardless of the election.
+       *
+       * Gated on an edit rather than on a timer, which is what makes it safe to
+       * leave on. A board nobody is drawing on needs no save, so a quiet board
+       * never reaches this line, and the check costs one comparison per change
+       * on a board whose writer is working.
+       *
+       * Viewers are excluded because the RPC would reject them anyway.
+       */
+      const since = savedAtRef.current ?? joinedAt;
+      const stale = Date.now() - since > STALE_WRITER_MS;
+      if (isWriterRef.current || (stale && role !== "viewer")) snapshots.mark(elements);
 
       if (sceneTimer.current === null) {
         sceneTimer.current = setTimeout(() => void flushScene(), SCENE_FLUSH_INTERVAL_MS);
       }
     },
-    [flushScene, snapshots],
+    [flushScene, snapshots, joinedAt, role],
   );
 
   const cursorPresence = useCallback(
@@ -646,7 +689,7 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         const result = decodeEvent(BoardEvent.SAVED, payload);
         if (!result.ok) return;
         setSavedVersion(result.data.sceneVersion);
-        setLastSavedAt(result.data.at);
+        markSaved(result.data.at);
         snapshots.observeVersion(result.data.sceneVersion);
       })
       .on("broadcast", { event: BoardEvent.AI }, ({ payload }) => {
