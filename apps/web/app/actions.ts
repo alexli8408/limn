@@ -42,7 +42,10 @@ export async function renameBoard(boardId: string, title: string) {
     .update({ title: title.trim().slice(0, 200) || "Untitled board" })
     .eq("id", boardId);
   if (error) throw new Error(error.message);
+  // Both surfaces show the title, and renaming from one used to leave the other
+  // showing the old name until something else happened to revalidate it.
   revalidatePath("/dashboard");
+  revalidatePath(`/board/${boardId}`);
 }
 
 /**
