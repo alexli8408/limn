@@ -112,6 +112,11 @@ export default async function LandingPage() {
             <StrokeMorph />
           </section>
 
+          {/* A hairline in place of the counters when the figures are not
+              available, so a failed stats call reads as a quieter page rather
+              than as a hole where something was clearly meant to be. */}
+          {!stats && <hr className="rule" />}
+
           {stats && (
             <section className="counters" aria-label="Usage">
               {(

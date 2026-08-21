@@ -388,6 +388,23 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           ? { x: existing.x, y: existing.y + existing.height + 120 }
           : { x: 120, y: 120 };
 
+        // The prompt path never checked kind, and it matters more now that kind
+        // fails closed to "drawing": a request the model declines compiles to
+        // nothing, and this used to commit that nothing and report "Done." The
+        // user watched a spinner for several seconds and got a success message
+        // over an unchanged board.
+        if (payload.diagram.kind !== "diagram" || payload.diagram.nodes.length === 0) {
+          setAiRun({
+            state: "declined",
+            message:
+              payload.diagram.rationale ||
+              "That did not describe something this can draw as a diagram.",
+            hint: "Describe things and how they connect, for example: commit, build, test, deploy, with a rollback from deploy.",
+          });
+          announceAi("done", "prompt", props.displayName);
+          return;
+        }
+
         // No source sketch to take colour from, so follow whatever the rest of
         // the board is drawn in and let a new diagram match its surroundings.
         const compiled = compileDiagram(payload.diagram, {
@@ -395,6 +412,11 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           origin,
           ink: inkOf(all),
         });
+
+        if (compiled.elements.length === 0) {
+          throw new Error("the model did not return anything placeable");
+        }
+
         commit([...all, ...compiled.elements], true);
         api.scrollToContent(compiled.elements as never, { fitToContent: true });
         applyAiTitle(payload.diagram.title);
