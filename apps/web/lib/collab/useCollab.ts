@@ -96,6 +96,17 @@ export interface CollabHandle {
 /** How long to wait before retrying a flush that had nowhere to send. */
 const OFFLINE_RETRY_MS = 1_000;
 
+/**
+ * Viewer cursors go out at 4/s, not at the editor's rate.
+ *
+ * An editor's cursor is a broadcast, which peers handle cheaply. A viewer has no
+ * broadcast permission so their cursor rides presence instead, and every
+ * presence update forces a full roster rebuild and re-render on every other
+ * peer. That asymmetry is not obvious from the call site, which is why both used
+ * to share one interval.
+ */
+const VIEWER_CURSOR_INTERVAL_MS = 250;
+
 const newPeerId = (): string =>
   `p_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 
@@ -160,6 +171,9 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assembler = useRef(new ChunkAssembler());
   const peersRef = useRef<PeerState[]>([]);
+  const lastViewerTrack = useRef(0);
+  /** Cheap identity of the roster, so an unchanged one does not re-render. */
+  const rosterKey = useRef("");
   const lastFingerprint = useRef(sceneFingerprint(initialElements));
 
   // Kept in refs as well as state: the channel callbacks are registered once and
@@ -316,6 +330,12 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     // Viewers cannot broadcast, the Realtime insert policy only lets them touch
     // presence, so their cursor rides along in presence state instead.
     if (role === "viewer") {
+      // Presence updates make every other peer rebuild its roster and re-render,
+      // so a viewer waving a mouse at the editor interval cost the whole board
+      // 20 roster rebuilds a second. A cursor is worth far less than that.
+      const now = Date.now();
+      if (now - lastViewerTrack.current < VIEWER_CURSOR_INTERVAL_MS) return;
+      lastViewerTrack.current = now;
       void channel.track(cursorPresence(cursor));
       return;
     }
@@ -485,7 +505,18 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
         const state = channel.presenceState() as Record<string, unknown[]>;
         const roster = flattenPresence(state);
         peersRef.current = roster;
-        setPeers(roster);
+
+        // Presence sync fires for cursor movement too, and the roster is
+        // usually identical. Comparing a cheap key first turns a re-render per
+        // cursor frame into a re-render per join or leave.
+        const key = roster
+          .map((p) => `${p.peerId}:${p.role}:${p.name}`)
+          .sort()
+          .join("|");
+        if (key !== rosterKey.current) {
+          rosterKey.current = key;
+          setPeers(roster);
+        }
 
         const live = new Set(roster.map((p) => p.peerId));
         // "X is generating a diagram…" used to stick for the rest of the session

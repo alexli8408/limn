@@ -47,6 +47,16 @@ export interface BoardCanvasProps {
 /** Stable empty set, so getHeldIds does not allocate on every remote frame. */
 const EMPTY_HELD: ReadonlySet<string> = new Set();
 
+/**
+ * Hoisted out of the render.
+ *
+ * Excalidraw memoises itself on its props, and an object literal written inline
+ * is a new reference every render, so this alone was enough to make that memo
+ * never hit. With a remote cursor moving at 20 frames a second, the entire
+ * canvas subtree was re-rendering 20 times a second for no reason.
+ */
+const UI_OPTIONS = { canvasActions: { toggleTheme: true, loadScene: false } } as const;
+
 export default function BoardCanvas(props: BoardCanvasProps) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   // TEMPORARY verification scaffold. Not committed.
@@ -79,6 +89,8 @@ export default function BoardCanvas(props: BoardCanvasProps) {
   );
 
   const readOnly = props.role === "viewer";
+  /** Read only from the Save now menu item, so it stays out of the memo deps. */
+  const flushRef = useRef<() => Promise<void>>(async () => {});
 
   // Guards re-entry: applying a remote update triggers onChange, which would
   // otherwise be published straight back out as a local edit.
@@ -142,6 +154,11 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     getHeldIds,
   });
 
+  // useCollab returns a fresh object each render, so anything depending on
+  // `collab` wholesale is rebuilt every render even though these functions are
+  // individually stable.
+  const { publishScene, publishCursor, announceAi, isWriter, savedVersion } = collab;
+
   /** Applies a locally produced scene and publishes it in one step. */
   const commit = useCallback(
     (next: SyncElement[], undoable = true) => {
@@ -157,10 +174,12 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       } finally {
         applyingRemote.current = false;
       }
-      collab.publishScene(next);
+      publishScene(next);
     },
-    [api, collab],
+    [api, publishScene],
   );
+
+  flushRef.current = collab.flush;
 
   const beautify = useStrokeBeautify({
     enabled: beautifyOn && !readOnly,
@@ -182,10 +201,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       lastLocalVersion.current = version;
 
       if (scene.some((el) => !el.isDeleted)) setShowHint(false);
-      collab.publishScene(scene);
+      publishScene(scene);
       beautify.onSceneChange(scene, appState);
     },
-    [collab, beautify, readOnly],
+    [publishScene, beautify, readOnly],
   );
 
   const onPointerUpdate = useCallback(
@@ -194,14 +213,14 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       button: "up" | "down";
     }) => {
       pointerDown.current = payload.button === "down";
-      collab.publishCursor(
+      publishCursor(
         payload.pointer.x,
         payload.pointer.y,
         api?.getAppState().activeTool?.type,
         payload.button,
       );
     },
-    [collab, api],
+    [publishCursor, api],
   );
 
   /* ---------------------------------------------------------------- */
@@ -230,7 +249,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       const controller = new AbortController();
       aiAbort.current = controller;
       setAiRun({ state: "running", message: "Reading your sketch…", startedAt: Date.now() });
-      collab.announceAi("start", "refine", props.displayName);
+      announceAi("start", "refine", props.displayName);
 
       try {
         // The model gets a picture as well as coordinates: which arrow points at
@@ -280,7 +299,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
                 ? "Draw some shapes and connect them with arrows, then try again."
                 : "Clean up only redraws diagrams. For a drawing, the Snap toggle in the header tidies strokes as you draw.",
           });
-          collab.announceAi("done", "refine", props.displayName);
+          announceAi("done", "refine", props.displayName);
           return;
         }
 
@@ -318,7 +337,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             model: String(payload.meta.model ?? ""),
           },
         });
-        collab.announceAi("done", "refine", props.displayName);
+        announceAi("done", "refine", props.displayName);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           setAiRun(null);
@@ -328,10 +347,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             message: error instanceof Error ? error.message : "generation failed",
           });
         }
-        collab.announceAi("error", "refine", props.displayName);
+        announceAi("error", "refine", props.displayName);
       }
     },
-    [api, readOnly, collab, props.boardId, props.displayName, commit, applyAiTitle],
+    [api, readOnly, announceAi, props.boardId, props.displayName, commit, applyAiTitle],
   );
 
   const runPromptAi = useCallback(
@@ -341,7 +360,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       const controller = new AbortController();
       aiAbort.current = controller;
       setAiRun({ state: "running", message: "Composing a diagram…", startedAt: Date.now() });
-      collab.announceAi("start", "prompt", props.displayName);
+      announceAi("start", "prompt", props.displayName);
 
       try {
         const response = await fetch("/api/ai/prompt", {
@@ -390,7 +409,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             model: String(payload.meta.model ?? ""),
           },
         });
-        collab.announceAi("done", "prompt", props.displayName);
+        announceAi("done", "prompt", props.displayName);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           setAiRun(null);
@@ -400,10 +419,10 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             message: error instanceof Error ? error.message : "generation failed",
           });
         }
-        collab.announceAi("error", "prompt", props.displayName);
+        announceAi("error", "prompt", props.displayName);
       }
     },
-    [api, readOnly, collab, props.boardId, props.displayName, commit, applyAiTitle],
+    [api, readOnly, announceAi, props.boardId, props.displayName, commit, applyAiTitle],
   );
 
   const runVectorize = useCallback(
@@ -491,6 +510,29 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     [props.initialElements],
   );
 
+  // Memoised for the same reason as UI_OPTIONS: Excalidraw's comparator bails
+  // the moment `children` differ by reference, and inline JSX differs every
+  // render. These read only the writer flag and the saved version.
+  const canvasChrome = useMemo(
+    () => (
+      <>
+        <MainMenu>
+          <MainMenu.DefaultItems.ToggleTheme />
+          <MainMenu.DefaultItems.ChangeCanvasBackground />
+          <MainMenu.DefaultItems.SaveAsImage />
+          <MainMenu.Separator />
+          <MainMenu.Item onSelect={() => void flushRef.current()}>Save now</MainMenu.Item>
+        </MainMenu>
+        <Footer>
+          <div className="pointer-events-none px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+            {isWriter ? "persisting" : "following"} · v{savedVersion}
+          </div>
+        </Footer>
+      </>
+    ),
+    [isWriter, savedVersion],
+  );
+
   return (
     <div className="relative flex h-dvh w-full flex-col">
       <PresenceBar
@@ -528,22 +570,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           onPointerUpdate={onPointerUpdate as never}
           theme="dark"
           viewModeEnabled={readOnly}
-          UIOptions={{ canvasActions: { toggleTheme: true, loadScene: false } }}
+          UIOptions={UI_OPTIONS}
         >
-          <MainMenu>
-            <MainMenu.DefaultItems.ToggleTheme />
-            <MainMenu.DefaultItems.ChangeCanvasBackground />
-            <MainMenu.DefaultItems.SaveAsImage />
-            <MainMenu.Separator />
-            <MainMenu.Item onSelect={() => void collab.flush()}>
-              Save now
-            </MainMenu.Item>
-          </MainMenu>
-          <Footer>
-            <div className="pointer-events-none px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-              {collab.isWriter ? "persisting" : "following"} · v{collab.savedVersion}
-            </div>
-          </Footer>
+          {canvasChrome}
         </Excalidraw>
 
         {showHint && !readOnly && <FirstRunHint />}
