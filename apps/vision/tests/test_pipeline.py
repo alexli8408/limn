@@ -219,10 +219,31 @@ def test_ink_extraction_survives_glare_and_gradient() -> None:
 
 def test_vectorize_recovers_the_diagram() -> None:
     photo, expected = synthesise_photo()
-    shapes, deskewed, traced = vectorize(photo, do_deskew=True, max_dim=1400)
+    shapes, deskewed, traced, traced_w, traced_h = vectorize(photo, do_deskew=True, max_dim=1400)
 
     assert deskewed
     assert traced == expected, f"expected {expected} strokes, traced {traced}"
+
+    # The reported frame has to be the one the shapes are in, not the photo's.
+    # The client scales normalised OCR boxes against it to place labels beside
+    # these shapes, so reporting the wrong frame puts every word off the board
+    # it was read from, by whatever factor the pipeline changed the image by.
+    #
+    # Both stages change it, and they are checked separately because either one
+    # alone is enough to break placement. Deskew warps to the board's corners:
+    assert (traced_w, traced_h) != photo.shape[1::-1], (
+        f"reported the photo's own frame {photo.shape[1::-1]}, not the traced one"
+    )
+    for spec in shapes:
+        assert -1 <= spec.x <= traced_w, f"shape x {spec.x:.0f} outside the reported frame"
+        assert -1 <= spec.y <= traced_h, f"shape y {spec.y:.0f} outside the reported frame"
+
+    # And downscaling caps the longest side, which is the larger of the two
+    # effects on a phone photo. Deskew off here so this measures only that.
+    small = vectorize(photo, do_deskew=False, max_dim=600)
+    assert max(small.width, small.height) == 600, (
+        f"frame {small.width}x{small.height} does not reflect max_dim=600"
+    )
 
     counts: dict[str, int] = {}
     for spec in shapes:

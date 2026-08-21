@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import binascii
 import math
+from typing import NamedTuple
 
 import cv2
 import numpy as np
@@ -496,6 +497,23 @@ def sample_stroke_colour(img: np.ndarray, polyline: np.ndarray) -> str:
     return best
 
 
+class VectorizeResult(NamedTuple):
+    shapes: list[ShapeSpec]
+    deskewed: bool
+    traced: int
+    #: Size of the image the shape coordinates are actually in.
+    #:
+    #: Not the size of the photo that was uploaded. downscale() caps the longest
+    #: side at max_dim and deskew() warps to the board's corners, so by the time
+    #: anything is traced the frame has usually changed on both axes. Callers
+    #: that place something alongside these shapes, the OCR pass being the one
+    #: that does, need this frame rather than the original: scaling a normalised
+    #: box by the photo's own dimensions puts a label off the end of a board it
+    #: was read from, by whatever factor the downscale applied.
+    width: int
+    height: int
+
+
 def vectorize(
     img: np.ndarray,
     *,
@@ -503,8 +521,8 @@ def vectorize(
     max_dim: int = 1600,
     min_stroke_px: int = 26,
     fit_shapes: bool = True,
-) -> tuple[list[ShapeSpec], bool, int]:
-    """Runs the whole pipeline. Returns (shapes, deskewed, traced_count)."""
+) -> VectorizeResult:
+    """Runs the whole pipeline."""
     img = downscale(img, max_dim)
     deskewed = False
     if do_deskew:
@@ -555,4 +573,5 @@ def vectorize(
         spec.stroke_color = colour
         shapes.append(spec)
 
-    return shapes, deskewed, len(polylines)
+    height, width = img.shape[:2]
+    return VectorizeResult(shapes, deskewed, len(polylines), int(width), int(height))

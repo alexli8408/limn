@@ -107,8 +107,16 @@ class VectorizeResponse(BaseModel):
     shapes: list[ShapeSpec]
     #: True when a quadrilateral was found and the image was flattened.
     deskewed: bool
+    #: Dimensions of the uploaded photo. Reported for logging and for callers
+    #: that want to know how much was thrown away; nothing in `shapes` is in
+    #: this space.
     source_width: int
     source_height: int
+    #: Dimensions of the frame `shapes` are actually in, after downscaling to
+    #: max_dim and after any deskew warp. This is the one to scale against when
+    #: placing anything alongside the traced shapes.
+    traced_width: int
+    traced_height: int
     traced_strokes: int
     latency_ms: int
 

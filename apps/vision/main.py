@@ -235,13 +235,14 @@ def vectorize_image(payload: VectorizeRequest, _: Guard) -> VectorizeResponse:
         ) from exc
 
     height, width = image.shape[:2]
-    shapes, deskewed, traced = vectorize(
+    result = vectorize(
         image,
         do_deskew=payload.deskew,
         max_dim=payload.max_dim,
         min_stroke_px=payload.min_stroke_px,
         fit_shapes=payload.fit_shapes,
     )
+    shapes, deskewed, traced = result.shapes, result.deskewed, result.traced
 
     elapsed = (time.perf_counter() - started) * 1000
     telemetry.record("vectorize", elapsed)
@@ -259,6 +260,8 @@ def vectorize_image(payload: VectorizeRequest, _: Guard) -> VectorizeResponse:
         deskewed=deskewed,
         source_width=width,
         source_height=height,
+        traced_width=result.width,
+        traced_height=result.height,
         traced_strokes=traced,
         latency_ms=int(elapsed),
     )

@@ -482,6 +482,8 @@ export default function BoardCanvas(props: BoardCanvasProps) {
               deskewed: boolean;
               source_width: number;
               source_height: number;
+              traced_width: number;
+              traced_height: number;
             }
           | { error: string };
         if (!response.ok || "error" in payload) {
@@ -505,9 +507,9 @@ export default function BoardCanvas(props: BoardCanvasProps) {
         // failure path: text is a bonus, and a board that traced correctly
         // should not be reported as a failure because the reading step was rate
         // limited or refused.
-        const words = await readPhotoText(props.boardId, image, controller.signal);
+        const words = await readPhotoText(props.boardId, image, file.type, controller.signal);
         const labels = words.length
-          ? textToElements(words, origin, payload.source_width, payload.source_height)
+          ? textToElements(words, origin, payload.traced_width, payload.traced_height)
           : [];
 
         commit([...all, ...elements, ...labels], true);
@@ -681,16 +683,36 @@ interface OcrWord {
  * losing the labels is a smaller loss than telling someone their photo failed
  * when a board full of shapes is sitting on their canvas.
  */
+/** What the OCR route will accept, and what the file picker offers. */
+const OCR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
+
 async function readPhotoText(
   boardId: string,
   image: string,
+  mimeType: string,
   signal: AbortSignal,
 ): Promise<OcrWord[]> {
   try {
     const response = await fetch("/api/ai/ocr", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ boardId, image }),
+      /**
+       * The type has to travel with the bytes. The route defaults to image/png
+       * when it is absent and this call never sent it, so every photo off a
+       * phone, which is a JPEG, was declared to Gemini as a PNG. It is decoded
+       * by content rather than by the label, so it mostly worked, which is the
+       * problem: the failures it does cause are occasional and look like the
+       * model being bad at reading rather than like a wrong header.
+       *
+       * Filtered rather than passed through, because the route validates
+       * against a fixed set and a browser that reports something outside it
+       * would turn a working trace into a 400 for the sake of a bonus step.
+       */
+      body: JSON.stringify({
+        boardId,
+        image,
+        ...(OCR_MIME.has(mimeType) ? { mimeType } : {}),
+      }),
       signal,
     });
     if (!response.ok) return [];
@@ -706,11 +728,19 @@ async function readPhotoText(
 /**
  * Places read words into the same space the traced shapes landed in.
  *
- * The boxes arrive normalised to the photo, and the tracer reports the pixel
- * dimensions it worked in, so the two multiply together. This is approximate
- * when the tracer deskewed the image, because the words were read from the
- * original and the shapes come from the flattened one; the alternative is
- * throwing every label away, and a label a few pixels out can be dragged.
+ * The boxes arrive normalised, so they need a frame to multiply by, and it has
+ * to be `traced_*` rather than `source_*`. Those were the same number for a
+ * board photographed square-on and small, which is what made the original wrong
+ * version look right: `source_*` is the uploaded photo, while the tracer caps
+ * the longest side at 1600 and then warps to the board's corners. Hand it a
+ * 4000px phone photo and every label lands two and a half times too far from
+ * the origin at two and a half times the size, on a board whose shapes are all
+ * inside 1600.
+ *
+ * Still approximate, because the words were read from the unflattened photo
+ * while the shapes come from the deskewed one, so a steep angle leaves a label
+ * offset from its box. The alternative is throwing every label away, and one a
+ * few pixels out can be dragged.
  */
 function textToElements(
   words: readonly OcrWord[],
