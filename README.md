@@ -32,7 +32,9 @@ themselves from the presence map to persist the board.
 **Reads a physical whiteboard.** Photograph one and OpenCV flattens the
 perspective, separates ink from board under glare and uneven lighting, thins the
 ink to a one-pixel centreline, walks that into polylines and fits real shapes you
-can edit. Not a traced image.
+can edit. Not a traced image. OpenCV is good at edges and hopeless at cursive, so
+the handwriting is a second pass: Gemini transcribes each label and says where on
+the board it sits, and the words land back in the boxes they were written in.
 
 **Beautifies without rewriting.** Gemini reads a sketch, as both an image and an
 element list, and returns structure rather than scene JSON. A deterministic
@@ -51,8 +53,8 @@ with the command beside it.
 | Stroke recognition accuracy | **95.8%** over 600 synthetic strokes (5 primitives, a third of them rotated, with hand-tremor and closing-overshoot artefacts) | `pnpm --filter @limn/shapes test` |
 | Photo to diagram | **4/4** drawn primitives recovered with correct dimensions from a synthesised photo (perspective warp, illumination gradient, glare hotspot, sensor noise), in **~57 ms** | `cd apps/vision && pytest tests -q` |
 | Merge convergence | 5 simulated peers over 40 rounds of randomised delivery order, batching and replays. **No divergence**, no duplicates, no holes | `pnpm --filter @limn/protocol test` |
-| Access control | 14 assertions on RLS, share-link redemption and snapshot compare-and-swap, against real Postgres | `./supabase/tests/run.sh` |
-| Test suites | **52 tests** across TypeScript, Python and SQL | `pnpm test` |
+| Access control | 19 checks on RLS, share-link redemption, revision sampling and snapshot compare-and-swap, against real Postgres | `./supabase/tests/run.sh` |
+| Test suites | **74 tests** across TypeScript and Python, plus the SQL checks above | `pnpm test` |
 
 Realtime throughput and latency depend on your own Supabase project, so they are
 not quoted here. Measure yours:

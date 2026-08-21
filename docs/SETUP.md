@@ -92,15 +92,29 @@ because TCP completes against the local proxy.
 reachable over IPv4. `supabase link` already cached the pooler URL; the script
 just supplies the password. Use it for every later migration too.
 
-It should apply five migrations in order:
+It should apply ten migrations in order:
 
 ```
-20260814000100_schema.sql     tables, triggers, revision pruning
-20260814000200_functions.sql  access helpers, snapshot compare-and-swap
-20260814000300_rls.sql        row-level security + Realtime authorization
-20260814000400_storage.sql    buckets for images and thumbnails
-20260814000500_grants.sql     explicit table privileges
+20260814000100_schema.sql             tables, triggers, revision pruning
+20260814000200_functions.sql          access helpers, snapshot compare-and-swap
+20260814000300_rls.sql                row-level security + Realtime authorization
+20260814000400_storage.sql            buckets for images and thumbnails
+20260814000500_grants.sql             explicit table privileges
+20260814000600_tighten_grants.sql     revokes Supabase's permissive defaults
+20260814000700_fix_guest_display_name.sql
+20260814000800_illustrate_mode.sql    an enum label kept for compatibility
+20260821000100_generation_attempts.sql  retry count and model actually used
+20260821000200_thumbnail_policies.sql   re-creates the thumbnail bucket policies
 ```
+
+The last one exists because the `board-thumbnails` policies written in
+`...000400_storage.sql` did not survive the original push on at least one
+project: uploading to `board-files` worked while the identical request against
+`board-thumbnails` came back with `new row violates row-level security policy`.
+Re-running the original migration cannot fix that, because a migration already
+recorded as applied is skipped, so the policies are re-created in a new file.
+Symptom if it has not been applied: every board in the dashboard shows a blank
+thumbnail and the console logs an RLS error on save.
 
 ### 2c. Set up sign-in
 
@@ -294,8 +308,15 @@ different subsystem, so a failure tells you which one.
 7. **Draw a few boxes and arrows, then Beautify → "Keep my layout."**
    *Exercises: Gemini, constrained decoding, the compiler.*
 8. **Beautify → "From photo"**, upload any photo of a whiteboard or a
-   pen-and-paper sketch.
-   *Exercises: the OpenCV pipeline end to end.*
+   pen-and-paper sketch. → shapes land as editable elements, and any handwriting
+   on them comes back as text sitting where it was written.
+   *Exercises: the OpenCV pipeline end to end, and the Gemini transcription pass
+   that runs beside it.*
+9. **Go back to the dashboard.** → the board you just drew on shows a thumbnail
+   of it rather than an empty tile.
+   *Exercises: the `board-thumbnails` bucket and its storage policies. A blank
+   tile here almost always means `20260821000200_thumbnail_policies.sql` has not
+   been pushed.*
 
 If step 5 fails with a policy error, the `realtime.messages` policies from
 migration `...000300_rls.sql` did not apply. Re-run `./scripts/db.sh push`.
@@ -437,6 +458,8 @@ supabase db push          # apply new migrations
 | Second window shows no cursor | Check both are the *same* board id; a share link without `?t=` grants nothing |
 | Snapping never fires | Only freehand (pencil) strokes are recognised. The rectangle *tool* is already a rectangle |
 | Beautify returns 502 | `GEMINI_API_KEY` missing or rate-limited |
+| Dashboard tiles are all blank | `...000200_thumbnail_policies.sql` has not been pushed, so the upload is refused by RLS |
+| Photo trace returns shapes but no words | Handwriting is transcribed by Gemini, not OpenCV, so this is the same `GEMINI_API_KEY` as Beautify |
 | Photo trace times out | Cold Render instance; first request after a sleep pays ~50s |
 | Photo trace fails only in production | `ALLOWED_ORIGINS` (Phase 8) |
 | Build fails mentioning `serverEnv()` | Something imported it from a client component, which is the guard working |

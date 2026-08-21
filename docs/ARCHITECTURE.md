@@ -292,12 +292,21 @@ original direction, so a cycle in the user's diagram still reads as a cycle.
 | | Interval | Reason |
 |---|---|---|
 | Scene deltas | 33 ms (~30 fps) | Indistinguishable from 60 while halving traffic |
-| Cursors | 50 ms (20 fps) | Indistinguishable from 60 at a third of the cost |
+| Cursors, editor | 50 ms (20 fps) | Indistinguishable from 60 at a third of the cost |
+| Cursors, viewer | 250 ms (4 fps) | A viewer has no broadcast permission, so their cursor rides presence, and every presence update forces a full roster rebuild and re-render on every other peer |
 | Client event ceiling | 40/s | Realtime's default of 10/s starves a 30 fps channel and silently drops the tail of a fast drag |
 
 Only elements whose `version` differs from what was last transmitted are sent. On
 a busy board that is the difference between shipping the whole scene 30×/s and
 shipping the two shapes that moved.
+
+That bookkeeping is committed only once a chunk is acknowledged. Marking an
+element as sent at the moment it was collected loses it outright when the send
+then fails: the channel drops, the retry recomputes the delta, and every element
+it had already crossed off is now considered current and never goes out again.
+The peer on the other side is missing shapes that no later edit will resend, and
+nothing anywhere reports an error. So the delta is computed without mutating,
+and the versions are recorded per chunk after the publish returns `ok`.
 
 Frames above the broadcast size ceiling are split and reassembled by `gid`.
 Realtime drops oversized frames silently from the sender's point of view, so the
