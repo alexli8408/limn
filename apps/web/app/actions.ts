@@ -29,7 +29,7 @@ export async function startDrawing(formData: FormData) {
   const { data: board, error } = await supabase.rpc("create_board", {
     p_title: title || "Untitled board",
   });
-  if (error || !board) throw new Error(`could not create a board: ${error?.message}`);
+  if (error || !board) throw new Error(`Could not create a board: ${error?.message}`);
 
   revalidatePath("/dashboard");
   redirect(`/board/${board.id}`);
@@ -122,7 +122,9 @@ export async function leaveBoard(boardId: string) {
  * enforcement point.
  */
 export async function setLinkRole(boardId: string, role: BoardRole) {
-  if (role !== "editor" && role !== "viewer") throw new Error("invalid link role");
+  if (role !== "editor" && role !== "viewer") {
+    throw new Error("Could not change what the link grants.");
+  }
   const { supabase } = await requireUser(`/board/${boardId}`);
 
   const { error } = await supabase
@@ -151,7 +153,7 @@ export async function setVisibility(
   visibility: BoardVisibility,
 ) {
   if (!["private", "link", "public"].includes(visibility)) {
-    throw new Error("invalid visibility");
+    throw new Error("Could not change who can open this board.");
   }
   const { supabase } = await requireUser(`/board/${boardId}`);
 
@@ -171,7 +173,7 @@ export async function rotateShareLink(boardId: string): Promise<string> {
   const { data, error } = await supabase.rpc("rotate_share_token", {
     p_board_id: boardId,
   });
-  if (error || !data) throw new Error(error?.message ?? "could not rotate the link");
+  if (error || !data) throw new Error(error?.message ?? "Could not reset the link.");
   revalidatePath(`/board/${boardId}`);
   return data;
 }

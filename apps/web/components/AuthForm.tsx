@@ -29,7 +29,7 @@ const field =
 const fieldLabel =
   "font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]";
 
-function Submit({ label }: { label: string }) {
+function Submit({ label, busy }: { label: string; busy: string }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -37,7 +37,7 @@ function Submit({ label }: { label: string }) {
       disabled={pending}
       className="w-full rounded-sm bg-[var(--ink-accent)] px-4 py-2.5 text-sm font-semibold text-[#0b0813] transition hover:bg-[var(--ink-accent-hot)] disabled:opacity-50"
     >
-      {pending ? "Working…" : label}
+      {pending ? busy : label}
     </button>
   );
 }
@@ -131,7 +131,7 @@ export default function AuthForm({ next, initialError }: Props) {
             <input
               name="name"
               autoComplete="name"
-              placeholder="What collaborators see"
+              placeholder="What people on the board see"
               className={field}
             />
           </label>
@@ -178,7 +178,10 @@ export default function AuthForm({ next, initialError }: Props) {
         </div>
 
         <div className="pt-1">
-          <Submit label={mode === "signin" ? "Sign in" : "Create account"} />
+          <Submit
+            label={mode === "signin" ? "Sign in" : "Create account"}
+            busy={mode === "signin" ? "Signing in…" : "Creating account…"}
+          />
         </div>
       </form>
 
@@ -239,7 +242,7 @@ export function ResetRequestForm() {
         </label>
 
         <div className="pt-1">
-          <Submit label="Email me a reset link" />
+          <Submit label="Email me a reset link" busy="Sending…" />
         </div>
       </form>
 
@@ -292,7 +295,7 @@ export function NewPasswordForm() {
         </label>
 
         <div className="pt-1">
-          <Submit label="Set new password" />
+          <Submit label="Set new password" busy="Saving…" />
         </div>
       </form>
 

@@ -46,8 +46,8 @@ const SPEC = [
   },
   {
     key: "when it helps",
-    title: "Cleans up, or says it cannot",
-    body: "Hand it a diagram and it redraws the whole thing where you put it, with shared baselines and properly bound arrows. Hand it a drawing and it tells you so, rather than forcing your sketch into boxes to fit what it knows how to make.",
+    title: "Clean up straightens what you drew",
+    body: "Hand it a diagram and it redraws the whole thing where you put it, with shared baselines and properly bound arrows. Hand it a sketch and it works with the shapes you already made, squaring edges and lining them up rather than replacing them with something it knows how to draw.",
     value: "3",
     unit: "AI modes",
   },
@@ -104,7 +104,7 @@ export default async function LandingPage() {
                   </Link>
                 )}
                 <span className="aside">
-                  {auth.user ? "signed in" : "google or email · free"}
+                  {auth.user ? "Signed in" : "Free. Google or email."}
                 </span>
               </div>
             </div>
@@ -171,8 +171,8 @@ export default async function LandingPage() {
           <span>Excalidraw · Supabase · OpenCV · Gemini</span>
           {stats && (
             <span>
-              ai p50 {stats.ai_latency_p50_ms}ms · vision p50{" "}
-              {stats.vision_latency_p50_ms}ms · {stats.boards_active_24h} active today
+              AI p50 {stats.ai_latency_p50_ms}ms · vision p50{" "}
+              {stats.vision_latency_p50_ms}ms · {stats.boards_active_24h} boards active today
             </span>
           )}
         </footer>

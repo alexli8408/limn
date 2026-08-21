@@ -115,7 +115,7 @@ export default function ShareDialog(props: Props) {
     const owner: Collaborator = {
       userId: props.ownerId,
       role: "owner",
-      name: nameOf.get(props.ownerId)?.display_name ?? "Owner",
+      name: nameOf.get(props.ownerId)?.display_name ?? "Anonymous",
       avatarUrl: nameOf.get(props.ownerId)?.avatar_url ?? null,
     };
 
@@ -126,7 +126,7 @@ export default function ShareDialog(props: Props) {
         .map((r) => ({
           userId: r.user_id,
           role: r.role,
-          name: nameOf.get(r.user_id)?.display_name ?? "Collaborator",
+          name: nameOf.get(r.user_id)?.display_name ?? "Anonymous",
           avatarUrl: nameOf.get(r.user_id)?.avatar_url ?? null,
         })),
     ]);
@@ -153,7 +153,9 @@ export default function ShareDialog(props: Props) {
         await setLinkRole(props.boardId, next);
       } catch (e) {
         setRole(props.linkRole);
-        setError(e instanceof Error ? e.message : "could not change the link role");
+        setError(
+          e instanceof Error ? e.message : "Could not change what the link grants.",
+        );
       }
     });
   };
@@ -165,7 +167,9 @@ export default function ShareDialog(props: Props) {
         await setVisibility(props.boardId, next);
       } catch (e) {
         setVisible(props.visibility);
-        setError(e instanceof Error ? e.message : "could not change who can open this");
+        setError(
+          e instanceof Error ? e.message : "Could not change who can open this board.",
+        );
       }
     });
   };
@@ -181,7 +185,7 @@ export default function ShareDialog(props: Props) {
         setUrl(next.toString());
         setCopied(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "could not rotate the link");
+        setError(e instanceof Error ? e.message : "Could not reset the link.");
       }
     });
   };
@@ -192,7 +196,7 @@ export default function ShareDialog(props: Props) {
         await removeCollaborator(props.boardId, userId);
         await load();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "could not remove that person");
+        setError(e instanceof Error ? e.message : "Could not remove that person.");
       }
     });
   };
@@ -208,7 +212,7 @@ export default function ShareDialog(props: Props) {
         ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-label="Share this board"
+        aria-label="Invite to this board"
         className="w-full max-w-md rounded-sm border border-[var(--ink-line)] bg-[var(--ink-surface)] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
@@ -363,7 +367,7 @@ export default function ShareDialog(props: Props) {
               </button>
               <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-faint)]">
                 Stops the old link working. People already on the list keep their
-                access, remove them above to revoke it.
+                access. Remove them above to revoke it.
               </p>
             </div>
           )}

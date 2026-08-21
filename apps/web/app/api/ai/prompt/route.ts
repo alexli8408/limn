@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   const supabase = await supabaseServer();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
-    return NextResponse.json({ error: "not signed in" }, { status: 401 });
+    return NextResponse.json({ error: "Your session has expired. Sign in again." }, { status: 401 });
   }
 
   let body: z.infer<typeof bodySchema>;
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     p_board_id: body.boardId,
   });
   if (!canEdit) {
-    return NextResponse.json({ error: "no write access to this board" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have edit access to this board. Ask the owner for an editor link." }, { status: 403 });
   }
 
   try {
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ diagram, meta: result.meta });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "generation failed";
+    const message = error instanceof Error ? error.message : "Could not build that diagram. Try again.";
     await recordGeneration(supabase, {
       board_id: body.boardId,
       user_id: auth.user.id,

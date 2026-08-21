@@ -45,6 +45,15 @@ export default async function DashboardPage() {
   const mine = (boards ?? []).filter((b) => b.owner_id === auth.user.id);
   const shared = (boards ?? []).filter((b) => b.owner_id !== auth.user.id);
 
+  // "0 shared with you" and "1 boards" are the two ways a count line gives away
+  // that nobody wrote it, so each case gets its own sentence.
+  const countLine =
+    shared.length === 0
+      ? `${mine.length} ${mine.length === 1 ? "board" : "boards"}.`
+      : mine.length === 0
+        ? `${shared.length} shared with you.`
+        : `${mine.length} of your own, ${shared.length} shared with you.`;
+
   // Bound to the row they sit in, so each card gets its own submit target
   // without a client component just to hold a board id.
   async function removeBoard(formData: FormData) {
@@ -91,7 +100,7 @@ export default async function DashboardPage() {
                   ? "Could not load your boards."
                   : mine.length + shared.length === 0
                     ? "Nothing here yet. Make one and send someone the link."
-                    : `${mine.length} of your own, ${shared.length} shared with you.`}
+                    : countLine}
               </p>
             </div>
 
@@ -112,7 +121,7 @@ export default async function DashboardPage() {
 
           {error && (
             <p className="mt-12 border border-[var(--ink-bad)]/40 bg-[var(--ink-bad)]/10 p-8 text-center text-sm text-[var(--ink-bad)]">
-              Could not load your boards. Reload to try again.
+              Reload the page. Nothing has been deleted.
             </p>
           )}
 
@@ -195,8 +204,10 @@ function Section({
                 href={`/board/${board.id}`}
                 className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)] transition hover:text-[var(--ink-dim)]"
               >
-                {board.element_count} elements ·{" "}
-                {new Date(board.updated_at).toLocaleDateString()}
+                {board.element_count === 0
+                  ? "Empty"
+                  : `${board.element_count} ${board.element_count === 1 ? "element" : "elements"}`}{" "}
+                · {new Date(board.updated_at).toLocaleDateString()}
                 {/* The column was already selected and thrown away, so a board
                     you had deliberately made private looked identical to one
                     anyone with the link could open. */}

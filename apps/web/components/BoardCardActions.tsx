@@ -13,6 +13,7 @@ interface Props {
 
 function Submit({ verb, armed }: { verb: string; armed: boolean }) {
   const { pending } = useFormStatus();
+  const working = verb === "Leave" ? "Leaving…" : "Deleting…";
   return (
     <button
       type="submit"
@@ -23,7 +24,7 @@ function Submit({ verb, armed }: { verb: string; armed: boolean }) {
           : "text-[var(--ink-faint)] opacity-70 hover:text-[var(--ink-bad)] hover:opacity-100 group-hover:opacity-100"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
-      {pending ? "Working…" : armed ? `Really ${verb.toLowerCase()}?` : verb}
+      {pending ? working : armed ? `Confirm ${verb.toLowerCase()}` : verb}
     </button>
   );
 }

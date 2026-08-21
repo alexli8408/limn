@@ -41,9 +41,8 @@ export default function ConnectionBar({ status, atCapacity, onRetry }: Props) {
       >
         <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[var(--ink-warn)]" />
         <span className="flex-1 leading-relaxed">
-          This board has grown very large. Nothing has been dropped, but syncing
-          and saving will get slower from here. Splitting it across two boards
-          will feel better than carrying on in one.
+          This board is very large. Nothing has been dropped, but syncing and
+          saving get slower from here. Move part of it to a second board.
         </span>
       </div>
     );

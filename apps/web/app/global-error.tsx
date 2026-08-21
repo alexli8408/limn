@@ -56,8 +56,8 @@ export default function GlobalError({
             The page failed to load.
           </h1>
           <p style={{ color: "#98a0b4", lineHeight: 1.6, margin: "0 0 2rem" }}>
-            This one is at the very top of the app, so reloading is the only thing
-            that helps. Your boards are stored server side and are not affected.
+            This one broke above everything else, so reloading is the only way
+            out of it. Nothing on your boards was lost.
           </p>
           <button
             type="button"

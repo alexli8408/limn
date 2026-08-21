@@ -22,14 +22,9 @@ export default function FirstRunHint() {
           Draw a rough shape and let go.
         </p>
         <ul className="mt-4 space-y-1.5 text-xs leading-relaxed text-[var(--ink-dim)]">
-          <li>It snaps to a clean one when you lift the pen.</li>
           <li>
-            <span className="text-[var(--ink-text)]">Snap</span> in the header
-            turns that off, and one undo gives your wobble back.
-          </li>
-          <li>
-            <span className="text-[var(--ink-text)]">Clean up</span>, bottom
-            right, redraws a whole sketch as a proper diagram.
+            It snaps to a clean one when you lift the pen. One undo gives your
+            wobble back.
           </li>
         </ul>
       </div>

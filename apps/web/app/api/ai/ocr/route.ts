@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const supabase = await supabaseServer();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
-    return NextResponse.json({ error: "not signed in" }, { status: 401 });
+    return NextResponse.json({ error: "Your session has expired. Sign in again." }, { status: 401 });
   }
 
   let body: z.infer<typeof bodySchema>;
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     p_board_id: body.boardId,
   });
   if (authzError || !canEdit) {
-    return NextResponse.json({ error: "no write access to this board" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have edit access to this board. Ask the owner for an editor link." }, { status: 403 });
   }
 
   // "vectorize" is the closest label ai_mode has. There is no OCR value in the
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ text: result.text, meta: result.meta });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "could not read the photo";
+    const message = error instanceof Error ? error.message : "Could not read the photo. Try again.";
     await recordGeneration(supabase, {
       board_id: body.boardId,
       user_id: auth.user.id,

@@ -37,20 +37,20 @@ interface FitResponse {
 export async function POST(request: Request) {
   const supabase = await supabaseServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  if (!auth.user) return NextResponse.json({ error: "Your session has expired. Sign in again." }, { status: 401 });
 
   let body: z.infer<typeof bodySchema>;
   try {
     body = bodySchema.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "invalid body" }, { status: 422 });
+    return NextResponse.json({ error: "Those strokes could not be read. Reload the board and try again." }, { status: 422 });
   }
 
   const { data: canEdit } = await supabase.rpc("can_edit_board", {
     p_board_id: body.boardId,
   });
   if (!canEdit) {
-    return NextResponse.json({ error: "no write access to this board" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have edit access to this board. Ask the owner for an editor link." }, { status: 403 });
   }
 
   try {
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const status = error instanceof VisionError ? error.status : 502;
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "fit failed" },
+      { error: error instanceof Error ? error.message : "Could not fit those strokes. Try again." },
       { status },
     );
   }

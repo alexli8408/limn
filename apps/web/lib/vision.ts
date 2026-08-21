@@ -42,7 +42,7 @@ export async function callVision<T>(
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
       throw new VisionError(
-        `vision service ${response.status}: ${detail.slice(0, 200)}`,
+        `The tracing service failed (${response.status}). ${detail.slice(0, 200)}`.trim(),
         response.status === 401 ? 500 : 502,
       );
     }
@@ -51,12 +51,14 @@ export async function callVision<T>(
     if (error instanceof VisionError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       throw new VisionError(
-        "the vision service did not respond in time (a sleeping free instance can take ~50s to wake)",
+        "The tracing service is still waking up. Give it a minute and try again.",
         504,
       );
     }
     throw new VisionError(
-      error instanceof Error ? error.message : "vision service unreachable",
+      error instanceof Error
+        ? error.message
+        : "The tracing service could not be reached. Try again in a minute.",
       502,
     );
   } finally {

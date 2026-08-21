@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/signin?error=Missing+sign-in+code", url.origin));
+    const incomplete = encodeURIComponent("That sign-in link was incomplete. Try again.");
+    return NextResponse.redirect(new URL(`/signin?error=${incomplete}`, url.origin));
   }
 
   const supabase = await supabaseServer();

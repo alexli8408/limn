@@ -42,7 +42,7 @@ function safeNext(value: FormDataEntryValue | null): string {
  * is telling someone to check an inbox nothing was ever sent to.
  */
 const MAIL_RATE_LIMITED =
-  "The shared mail server is rate limited, so nothing was sent. Try again in an hour, or use Continue with Google instead.";
+  "The shared mail server is rate limited, so nothing was sent. Try again in an hour, or use Continue with Google.";
 
 export async function signInWithPassword(
   _previous: AuthResult,
@@ -257,7 +257,9 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
   });
 
   if (error || !data.url) {
-    redirect(`/signin?error=${encodeURIComponent(error?.message ?? "Google sign-in is unavailable.")}`);
+    const message =
+      error?.message ?? "Google sign-in is not available right now. Use your email and password.";
+    redirect(`/signin?error=${encodeURIComponent(message)}`);
   }
 
   redirect(data.url);

@@ -46,9 +46,8 @@ export default function Error({
               <span className="text-[var(--ink-accent)]">not yours.</span>
             </h1>
             <p className="mb-8 text-sm leading-relaxed text-[var(--ink-dim)]">
-              Your boards are stored in Postgres and are not affected by this.
-              Trying again usually works, since most of what fails here is a
-              request that timed out.
+              Nothing on your boards was lost. What fails here is usually a
+              request that timed out, so try again.
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <button type="button" onClick={reset} className="primary">
