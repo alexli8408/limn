@@ -2,20 +2,79 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * What a finished run has to show for itself.
+ *
+ * Two shapes, because there are two things Beautify can do and they do not
+ * share a vocabulary. Rebuilding a diagram produces nodes and edges. Polishing a
+ * drawing produces neither, on purpose: it keeps the shapes that were drawn and
+ * lines them up, which is why a tidied house used to report "3 nodes · 0 edges"
+ * from a path that never made a node.
+ */
+export type AiStats =
+  | {
+      kind: "diagram";
+      nodes: number;
+      edges: number;
+      aligned: number;
+      latencyMs: number;
+      model: string;
+    }
+  | {
+      kind: "drawing";
+      groups: number;
+      shapes: number;
+      latencyMs: number;
+      model: string;
+    };
+
 export interface AiRun {
   state: "running" | "done" | "error" | "declined";
   message: string;
-  /** Shown under a decline, telling the user what would work instead. */
+  /**
+   * The second line, under the message.
+   *
+   * A decline puts what would work instead here. A polish that moved nothing
+   * puts the model's own words here, where they read as what it saw rather than
+   * as work it did.
+   */
   hint?: string;
   /** When the run started, so the panel can show elapsed time honestly. */
   startedAt?: number;
-  stats?: {
-    nodes: number;
-    edges: number;
-    aligned: number;
-    latencyMs: number;
-    model: string;
-  };
+  stats?: AiStats;
+}
+
+/** "1 shape", "2 shapes". A count with the wrong noun reads as a bug. */
+function count(n: number, noun: string): string {
+  return `${n} ${n === 1 ? noun : `${noun}s`}`;
+}
+
+/**
+ * The headline for a polish that moved something.
+ *
+ * Lives here rather than on the board because it is panel copy, and because it
+ * is the sentence the counts have to agree with: "Tidied 1 shapes across 1
+ * groups" was wrong twice in the one line.
+ */
+export function tidiedSummary(shapes: number, groups: number): string {
+  return `Tidied ${count(shapes, "shape")} across ${count(groups, "group")}.`;
+}
+
+/**
+ * The run's own numbers, in the words of whichever path produced them.
+ *
+ * Both branches go through count(). The diagram line used to hard-code its
+ * plurals, and two boxes with one arrow between them is the smallest thing
+ * anyone demos: it read "2 nodes · 1 edges". "aligned" is not a noun here, so it
+ * takes no s and is left out entirely when nothing was.
+ */
+export function statsLine(stats: AiStats): string {
+  const tail = `${stats.latencyMs}ms · ${stats.model}`;
+  if (stats.kind === "drawing") {
+    return `${count(stats.groups, "group")} · ${count(stats.shapes, "shape")} · ${tail}`;
+  }
+  const aligned = stats.aligned > 0 ? `${stats.aligned} aligned · ` : "";
+  return `${count(stats.nodes, "node")} · ${count(stats.edges, "edge")} · ${aligned}${tail}`;
 }
 
 interface Props {
@@ -123,9 +182,7 @@ function RunBox({
 
       {run.stats && (
         <div className="mt-1.5 font-mono text-[10px] tabular-nums opacity-70">
-          {run.stats.nodes} nodes · {run.stats.edges} edges
-          {run.stats.aligned > 0 && ` · ${run.stats.aligned} aligned`} ·{" "}
-          {run.stats.latencyMs}ms · {run.stats.model}
+          {statsLine(run.stats)}
         </div>
       )}
     </div>
@@ -277,7 +334,7 @@ export default function AiPanel(props: Props) {
           />
           <Row
             label="Fix the writing"
-            detail="Corrects spelling and capitalisation in every label, and changes nothing else."
+            detail="Corrects spelling and capitalisation in every label, or just the selected ones, and changes nothing else."
             disabled={busy}
             onClick={() => void props.onRewrite()}
           />

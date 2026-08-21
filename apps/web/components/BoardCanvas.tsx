@@ -9,6 +9,7 @@ import {
   convertToExcalidrawElements,
   exportToBlob,
   getSceneVersion,
+  restoreElements,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { Role, SyncElement } from "@limn/protocol";
@@ -16,13 +17,13 @@ import { useCollab } from "@/lib/collab/useCollab";
 import { useBoardThumbnail } from "@/lib/board/useBoardThumbnail";
 import { useStrokeBeautify } from "@/lib/beautify/useStrokeBeautify";
 import { compileDiagram, inkOf, tombstone } from "@/lib/ai/compile";
-import { polishSketch } from "@/lib/ai/polish";
+import { polishSketch, visualBox } from "@/lib/ai/polish";
 import { autoTitleBoard } from "@/app/actions";
 import type { LimnDiagram } from "@/lib/ai/schema";
 import RemoteCursors from "./RemoteCursors";
 import PresenceBar from "./PresenceBar";
 import ShareDialog from "./ShareDialog";
-import AiPanel, { type AiRun } from "./AiPanel";
+import AiPanel, { tidiedSummary, type AiRun } from "./AiPanel";
 import ConnectionBar from "./ConnectionBar";
 import FirstRunHint from "./FirstRunHint";
 import "@excalidraw/excalidraw/index.css";
@@ -343,23 +344,45 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           if (polished.changed.length === 0) {
             setAiRun({
               state: "done",
-              message: payload.diagram.rationale || "That already looks tidy, so nothing moved.",
+              /**
+               * Fixed words, not the model's.
+               *
+               * The rationale is written to say what it tidied, and the schema
+               * asks for exactly that, so it describes work in the past tense.
+               * Nothing here did any: every id it named may have been invented,
+               * or every op may have come in under the threshold that decides a
+               * move is worth making. Headlining the rationale then told the
+               * user their sketch had been squared up while the canvas sat
+               * exactly as they left it. It still goes below, where it reads as
+               * what the model saw rather than as what happened.
+               */
+              message: "That already looks tidy, so nothing moved.",
+              hint: payload.diagram.rationale || undefined,
             });
             announceAi("done", "refine", props.displayName);
             return;
           }
 
+          // A label bound inside a shape is carried by its container, so
+          // counting it would report two changes for the one thing the user
+          // sees move. Falls back to the raw count rather than claim 0 shapes
+          // over a commit that did change something.
+          const labels = boundLabelIds(live);
+          const shapes =
+            polished.changed.filter((id) => !labels.has(id)).length ||
+            polished.changed.length;
+
           commit(polished.elements, true);
           if (payload.diagram.title) applyAiTitle(payload.diagram.title);
           setAiRun({
             state: "done",
-            message:
-              payload.diagram.rationale ||
-              `Tidied ${polished.changed.length} shapes across ${polished.groups} groups.`,
+            message: payload.diagram.rationale || tidiedSummary(shapes, polished.groups),
+            // Groups and shapes, not nodes and edges. This path deliberately
+            // makes neither: it keeps what was drawn and lines it up.
             stats: {
-              nodes: polished.groups,
-              edges: 0,
-              aligned: polished.changed.length,
+              kind: "drawing",
+              groups: polished.groups,
+              shapes,
               latencyMs: Number(payload.meta?.latencyMs ?? 0),
               model: String(payload.meta?.model ?? "gemini"),
             },
@@ -395,6 +418,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           state: "done",
           message: payload.diagram.rationale || "Done.",
           stats: {
+            kind: "diagram",
             nodes: compiled.stats.nodes,
             edges: compiled.stats.edges,
             aligned: compiled.stats.aligned,
@@ -499,6 +523,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           state: "done",
           message: payload.diagram.rationale || "Done.",
           stats: {
+            kind: "diagram",
             nodes: compiled.stats.nodes,
             edges: compiled.stats.edges,
             aligned: 0,
@@ -536,12 +561,42 @@ export default function BoardCanvas(props: BoardCanvasProps) {
     if (!api || readOnly) return;
 
     const all = api.getSceneElements() as unknown as SyncElement[];
-    const items = all
-      .filter((el) => !el.isDeleted && typeof el.text === "string" && String(el.text).trim())
-      .map((el) => ({ id: el.id, text: String(el.text) }));
+    const selectedIds = new Set(
+      Object.keys(api.getAppState().selectedElementIds ?? {}),
+    );
+    /**
+     * The selection is the target when there is one, same as Beautify.
+     *
+     * Without this the route's own advice could not be followed: a board past
+     * the 200 item cap answers "more than one pass can check, select the part
+     * you want cleaned up", and selecting ten labels still sent all 201.
+     *
+     * A label bound inside a box comes along with the box. Excalidraw puts only
+     * the container in selectedElementIds, so selecting a labelled rectangle and
+     * asking for its spelling to be fixed found no writing at all.
+     */
+    const scope = selectedIds.size
+      ? all.filter(
+          (el) =>
+            selectedIds.has(el.id) ||
+            (typeof el.containerId === "string" && selectedIds.has(el.containerId)),
+        )
+      : all;
+
+    const items: { id: string; text: string }[] = [];
+    for (const el of scope) {
+      if (el.isDeleted) continue;
+      const written = writtenText(el);
+      if (written) items.push({ id: el.id, text: written });
+    }
 
     if (items.length === 0) {
-      setAiRun({ state: "error", message: "There is no writing on this board yet." });
+      setAiRun({
+        state: "error",
+        message: selectedIds.size
+          ? "There is no writing in what you selected."
+          : "There is no writing on this board yet.",
+      });
       return;
     }
 
@@ -576,13 +631,31 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       // Re-read, and bump only what changed: republishing every label on the
       // board would make one typo look like an edit to all of them.
       const live = api.getSceneElements() as unknown as SyncElement[];
-      const next = live.map((el) => {
+      const corrected = new Map<string, SyncElement>();
+      for (const el of live) {
         const text = edits.get(el.id);
-        if (text === undefined || text === el.text) return el;
+        if (text === undefined || text === writtenText(el)) continue;
+        // originalText is the field that holds what the author typed, so the
+        // correction goes there and the wrapped `text` is regenerated from it
+        // below. Setting text as well gives remeasureLabels the new string to
+        // wrap, and leaves something sane on the element if it declines to
+        // measure this one.
+        corrected.set(el.id, { ...el, text, originalText: text } as SyncElement);
+      }
+
+      if (corrected.size === 0) {
+        setAiRun({ state: "done", message: "Nothing to correct, the writing is already clean." });
+        announceAi("done", "refine", props.displayName);
+        return;
+      }
+
+      const measured = remeasureLabels(live, corrected);
+      const next = live.map((el) => {
+        const fixed = corrected.get(el.id);
+        if (!fixed) return el;
         return {
-          ...el,
-          text,
-          originalText: text,
+          ...fixed,
+          ...measured.get(el.id),
           version: Number(el.version ?? 0) + 1,
           versionNonce: Math.floor(Math.random() * 2 ** 31),
           updated: Date.now(),
@@ -592,10 +665,12 @@ export default function BoardCanvas(props: BoardCanvasProps) {
       commit(next, true);
       setAiRun({
         state: "done",
-        message: `Corrected ${edits.size} ${edits.size === 1 ? "label" : "labels"}.`,
+        message: `Corrected ${corrected.size} ${corrected.size === 1 ? "label" : "labels"}.`,
       });
       announceAi("done", "refine", props.displayName);
     } catch (error) {
+      // See the note on the first of these: a superseded run reports its own
+      // abort over the run that replaced it.
       if (aiAbort.current !== controller) return;
       if (error instanceof DOMException && error.name === "AbortError") {
         setAiRun(null);
@@ -605,6 +680,11 @@ export default function BoardCanvas(props: BoardCanvasProps) {
           message: error instanceof Error ? error.message : "could not read the writing",
         });
       }
+      // Beautify and Describe end their catch the same way. Without this a
+      // failed run left every peer looking at "Alice is cleaning up the sketch"
+      // for the rest of the session, since the start was announced and nothing
+      // ever said stop.
+      announceAi("error", "refine", props.displayName);
     }
   }, [api, readOnly, props.boardId, props.displayName, commit, announceAi]);
 
@@ -703,6 +783,7 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             labels.length ? ` and read ${labels.length} labels` : ""
           }${payload.deskewed ? " (perspective corrected)" : ""}.`,
           stats: {
+            kind: "diagram",
             nodes: payload.shapes.filter((s) => s.kind !== "freedraw").length,
             edges: 0,
             aligned: 0,
@@ -839,6 +920,22 @@ export default function BoardCanvas(props: BoardCanvasProps) {
             onDismiss={() => setAiRun(null)}
             onCancel={() => {
               aiAbort.current?.abort();
+              /**
+               * Peers are told from here, not from the run that was cancelled.
+               *
+               * That run lands in its catch a moment later, sees that
+               * aiAbort.current is no longer its own controller, and returns
+               * before it announces anything, which is right for a run that was
+               * superseded and wrong for one that was cancelled: nothing
+               * replaces it, so "Alice is cleaning up the sketch" stayed on
+               * every other screen until the board was reloaded. This is the
+               * only place that knows the difference.
+               *
+               * Any phase other than "start" clears the banner and the mode is
+               * read only when one is being raised, so "refine" stands in for
+               * whichever of the four was cancelled.
+               */
+              announceAi("done", "refine", props.displayName);
               // Cleared, not just aborted. The in-flight run compares itself
               // against this ref to decide whether it is still the current one,
               // and leaving it pointing at the controller that was just
@@ -977,33 +1074,155 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
+/**
+ * What the author actually typed.
+ *
+ * Excalidraw keeps a label twice over: `text` is the hard-wrapped copy, broken
+ * to fit the box it sits in, and `originalText` is the string as typed. Sending
+ * `text` to be proofread handed the model "Databse\nconection" and asked it to
+ * spell-check a line break. `originalText` is missing on elements old enough to
+ * predate it, hence the fallback.
+ *
+ * Returns null for anything with no writing on it, which is most of a board.
+ */
+function writtenText(el: SyncElement): string | null {
+  const original = typeof el.originalText === "string" ? el.originalText : "";
+  const wrapped = typeof el.text === "string" ? el.text : "";
+  const written = original.trim() ? original : wrapped;
+  return written.trim() ? written : null;
+}
+
+/** Text elements that live inside a container and move only when it does. */
+function boundLabelIds(elements: readonly SyncElement[]): Set<string> {
+  const ids = new Set<string>();
+  for (const el of elements) {
+    if (el.type === "text" && typeof el.containerId === "string" && el.containerId) {
+      ids.add(el.id);
+    }
+  }
+  return ids;
+}
+
+/** The fields a re-measure is allowed to write back onto a corrected label. */
+interface Remeasured {
+  text: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Re-wraps and re-measures labels whose text has just been corrected.
+ *
+ * Writing the new string into `text` and `originalText` by hand is what broke
+ * wrapped labels: the old line breaks came along with it, and width and height
+ * went on describing the string that used to be there, so a corrected label
+ * either overflowed its box or kept a gap where the typo had been.
+ *
+ * restoreElements is the supported way to ask for that measurement. It runs the
+ * same font metrics the editor runs when you finish typing, wrapping to the
+ * container's width when there is one. refreshDimensions is only read inside the
+ * repairBindings branch, so both flags have to be set.
+ *
+ * It is handed the corrected labels and their containers, never the whole scene:
+ * it drops anything it judges invisibly small, and running the board through it
+ * would delete elements nobody edited. Anything it declines to return keeps the
+ * hand-written correction, which is wrapped wrongly but is still the right words.
+ */
+function remeasureLabels(
+  live: readonly SyncElement[],
+  corrected: ReadonlyMap<string, SyncElement>,
+): Map<string, Remeasured> {
+  const byId = new Map(live.map((el) => [el.id, el]));
+  const subset = new Map<string, SyncElement>();
+  for (const label of corrected.values()) {
+    subset.set(label.id, label);
+    // The container has to travel with it. A bound label wraps to the width of
+    // the shape it sits in, and measured on its own it would be laid out as if
+    // it had the whole canvas to run along.
+    const containerId = typeof label.containerId === "string" ? label.containerId : null;
+    const container = containerId ? byId.get(containerId) : undefined;
+    if (container) subset.set(container.id, container);
+  }
+
+  let restored: SyncElement[];
+  try {
+    restored = restoreElements([...subset.values()] as never, null, {
+      repairBindings: true,
+      refreshDimensions: true,
+    }) as unknown as SyncElement[];
+  } catch {
+    /**
+     * A measurement that throws must not lose the correction.
+     *
+     * restoreElements measures against a canvas and whatever fonts have
+     * loaded, which is the only part of applying a correction that depends on
+     * anything outside our own data. Letting it throw sent the whole run to
+     * runRewrite's catch, so a model call that came back with the right words
+     * reported an error and changed nothing. The words are right whether or not
+     * the box around them was re-measured.
+     */
+    return new Map();
+  }
+
+  const measured = new Map<string, Remeasured>();
+  for (const el of restored) {
+    if (!corrected.has(el.id) || typeof el.text !== "string") continue;
+    const width = Number(el.width);
+    const height = Number(el.height);
+    const x = Number(el.x);
+    const y = Number(el.y);
+    if (![width, height, x, y].every(Number.isFinite)) continue;
+    measured.set(el.id, { text: el.text, width, height, x, y });
+  }
+  return measured;
+}
+
+/**
+ * One element as the model is told about it.
+ *
+ * The box comes from visualBox rather than from el.x and el.y, which are only
+ * the corner for a shape that has one. For a stroke they are the anchor of
+ * points[0], so a line drawn right to left from (300,50) to (150,50) was
+ * described as running from 300 to 450 while the image alongside it showed the
+ * ink at 150 to 300. The model then had to choose which of the two to believe.
+ */
 function toSketchElement(el: SyncElement) {
+  const box = visualBox(el);
   return {
     id: el.id,
     type: String(el.type ?? "unknown"),
-    x: Math.round(Number(el.x ?? 0)),
-    y: Math.round(Number(el.y ?? 0)),
-    width: Math.round(Number(el.width ?? 0)),
-    height: Math.round(Number(el.height ?? 0)),
+    x: Math.round(box?.x ?? 0),
+    y: Math.round(box?.y ?? 0),
+    width: Math.round(box?.width ?? 0),
+    height: Math.round(box?.height ?? 0),
     ...(typeof el.text === "string" && el.text ? { text: el.text.slice(0, 400) } : {}),
     ...(typeof el.containerId === "string" ? { containerId: el.containerId } : {}),
     ...(typeof el.strokeColor === "string" ? { strokeColor: el.strokeColor } : {}),
   };
 }
 
+/**
+ * The area a set of elements covers on the canvas.
+ *
+ * Same reason as toSketchElement for going through visualBox: a backwards
+ * stroke reports an anchor a full width away from its ink, and this is what a
+ * rebuilt diagram is placed against and what a new one is placed clear of. One
+ * such stroke used to push the origin off by its own length.
+ */
 function boundsOf(elements: readonly SyncElement[]) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const el of elements) {
-    const x = Number(el.x);
-    const y = Number(el.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x + Number(el.width ?? 0));
-    maxY = Math.max(maxY, y + Number(el.height ?? 0));
+    const box = visualBox(el);
+    if (!box) continue;
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.width);
+    maxY = Math.max(maxY, box.y + box.height);
   }
   return Number.isFinite(minX)
     ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
