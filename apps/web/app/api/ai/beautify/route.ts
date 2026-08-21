@@ -56,7 +56,7 @@ function sizeComplaint(raw: unknown): string | null {
 
   if (Array.isArray(body.elements) && body.elements.length > MAX_ELEMENTS) {
     return (
-      `This board has ${body.elements.length} elements, more than Clean up reads in one ` +
+      `This board has ${body.elements.length} elements, more than Beautify reads in one ` +
       `pass. Select the part you want tidied.`
     );
   }
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       console.warn("[limn] beautify rejected a body:", error.issues[0]?.message);
     }
     return NextResponse.json(
-      { error: "Clean up could not read that selection. Reload the board and try again." },
+      { error: "Beautify could not read that selection. Reload the board and try again." },
       { status: 422 },
     );
   }

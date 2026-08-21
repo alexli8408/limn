@@ -45,11 +45,11 @@ const SPEC = [
     unit: "recovered",
   },
   {
-    key: "when it helps",
-    title: "Clean up straightens what you drew",
+    key: "on anything",
+    title: "Beautify straightens what you drew",
     body: "Hand it a diagram and it redraws the whole thing where you put it, with shared baselines and properly bound arrows. Hand it a sketch and it works with the shapes you already made, squaring edges and lining them up rather than replacing them with something it knows how to draw.",
-    value: "3",
-    unit: "AI modes",
+    value: "4",
+    unit: "AI actions",
   },
 ];
 

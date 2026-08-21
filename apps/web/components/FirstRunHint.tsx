@@ -21,12 +21,13 @@ export default function FirstRunHint() {
         <p className="mt-3 text-lg font-[660] leading-snug tracking-[-0.02em] text-[var(--ink-text)]">
           Draw a rough shape and let go.
         </p>
-        <ul className="mt-4 space-y-1.5 text-xs leading-relaxed text-[var(--ink-dim)]">
-          <li>
-            It snaps to a clean one when you lift the pen. One undo gives your
-            wobble back.
-          </li>
-        </ul>
+        {/* One sentence, and a list of one is not a list. The three bullets
+            that used to sit here explained the whole feature set to someone who
+            had not drawn anything yet. */}
+        <p className="mt-4 text-xs leading-relaxed text-[var(--ink-dim)]">
+          It snaps to a clean one when you lift the pen. One undo gives your
+          wobble back.
+        </p>
       </div>
     </div>
   );
