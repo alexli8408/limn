@@ -106,8 +106,24 @@ def main() -> None:
             "points": [[round(x - x0, 1), round(y - y0, 1)] for x, y in points],
         })
 
+    # Opaque ids, deliberately.
+    #
+    # The strokes are defined above under names like "wall-left" and "sun"
+    # because a human has to maintain this file. Shipping those names in the
+    # JSON would hand the model the answer: it could group the drawing perfectly
+    # by reading the ids and never look at the picture, and the integration test
+    # would pass for entirely the wrong reason. Excalidraw's real ids are random,
+    # so the fixture uses random-looking ones too and the grouping has to come
+    # from the geometry and the image.
+    #
+    # Seeded from the same RNG, so the mapping is stable across regenerations.
+    alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    for element in elements:
+        element["id"] = "".join(RNG.choice(alphabet) for _ in range(21))
+
     (HERE / "hand-drawn.json").write_text(json.dumps(elements, indent=2) + "\n")
     print(f"wrote hand-drawn.png ({W}x{H}) and hand-drawn.json ({len(elements)} strokes)")
+    print("ids are opaque so the model cannot group by reading them")
 
 
 if __name__ == "__main__":
