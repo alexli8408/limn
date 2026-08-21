@@ -36,6 +36,16 @@ export interface ReconcileResult {
   elements: SyncElement[];
   /** Ids whose value actually changed. Empty means the scene can skip a repaint. */
   changed: string[];
+  /**
+   * Incoming elements withheld because the local user is mid-gesture on them.
+   *
+   * Reported rather than swallowed, because "not now" and "never" are different
+   * answers and the caller is the only one that can tell them apart. Skipping a
+   * remote edit to a shape under the pointer is right; forgetting it is not. The
+   * peer that sent it has already recorded it as delivered and will not send it
+   * again, so whatever the caller does not keep here is gone for good.
+   */
+  deferred: SyncElement[];
 }
 
 /**
@@ -66,10 +76,15 @@ export function reconcile(
 
   const changed: string[] = [];
   const seen = new Set<string>();
+  const deferred: SyncElement[] = [];
 
   for (const incoming of remote) {
     // Held elements are mid-gesture locally; a remote echo must not yank them.
-    if (held?.has(incoming.id)) continue;
+    // Handed back rather than dropped, see ReconcileResult.deferred.
+    if (held?.has(incoming.id)) {
+      deferred.push(incoming);
+      continue;
+    }
 
     const current = byId.get(incoming.id);
     if (!remoteWins(current, incoming)) continue;
@@ -96,9 +111,9 @@ export function reconcile(
 
   // Unchanged: hand back the original array so callers can compare by identity
   // and skip a repaint. Treated as immutable by every caller.
-  if (changed.length === 0) return { elements: local as SyncElement[], changed };
+  if (changed.length === 0) return { elements: local as SyncElement[], changed, deferred };
 
-  return { elements: order.map((id) => byId.get(id) as SyncElement), changed };
+  return { elements: order.map((id) => byId.get(id) as SyncElement), changed, deferred };
 }
 
 /**

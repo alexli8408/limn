@@ -188,6 +188,10 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   const rosterKey = useRef("");
   const lastFingerprint = useRef(sceneFingerprint(initialElements));
   const overCapacity = useRef(false);
+  /** Remote updates withheld while the local user is mid-gesture. See applyRemote. */
+  const deferredRemote = useRef(new Map<string, SyncElement>());
+  const drainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyRemoteRef = useRef<(incoming: SyncElement[]) => void>(() => {});
 
   // Kept in refs as well as state: the channel callbacks are registered once and
   // would otherwise capture the first render's values forever.
@@ -202,7 +206,23 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     const elected = electWriter(peers);
     return elected?.peerId ?? null;
   }, [peers]);
-  const isWriter = writer === peerId;
+
+  /**
+   * With an empty roster there is nobody to elect, and the old expression made
+   * that mean "not me", so nothing was the writer and nothing saved.
+   *
+   * The roster is empty for the first moment of every session, before presence
+   * syncs, and it stays empty for the whole session whenever Realtime is
+   * unreachable. Postgres is a separate service and is usually fine in that
+   * case, so the board could have been saved the entire time. Someone drawing
+   * through a Realtime outage would have been told their changes were only on
+   * this screen, which is true, and then found they were nowhere at all.
+   *
+   * Alone means responsible. If presence later names someone else, this peer
+   * stands down, and the brief overlap where two peers both believe they are
+   * the writer is what the snapshot compare-and-swap is there for.
+   */
+  const isWriter = writer === null ? role !== "viewer" : writer === peerId;
   const isWriterRef = useRef(isWriter);
   isWriterRef.current = isWriter;
 
@@ -326,6 +346,24 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
        */
       sceneRef.current = elements;
       pendingScene.current = elements;
+      /**
+       * A withheld remote update replays on the next inbound message, and if the
+       * peer who sent it has since gone quiet there is no next inbound message.
+       * The gesture ending is a local event, so the drain has to be driven from
+       * this side too. Cheap on the hot path: the map is empty on every board
+       * where two people are not touching the same shape at the same moment,
+       * and the timer coalesces the ~30 calls a second a drag produces into one.
+       *
+       * Out of band rather than inline, because applying a remote batch calls
+       * back into updateScene, which fires onChange, which lands back here.
+       */
+      if (deferredRemote.current.size > 0 && drainTimer.current === null) {
+        drainTimer.current = setTimeout(() => {
+          drainTimer.current = null;
+          if (deferredRemote.current.size > 0) applyRemoteRef.current([]);
+        }, 0);
+      }
+
       const over = elements.length > MAX_ELEMENTS_PER_BOARD;
       if (over !== overCapacity.current) {
         overCapacity.current = over;
@@ -423,12 +461,36 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
   /* ---------------------------------------------------------------- */
 
   const applyRemote = useCallback((incoming: SyncElement[]) => {
-    if (incoming.length === 0) return;
+    if (incoming.length === 0 && deferredRemote.current.size === 0) return;
+
+    // Anything withheld by an earlier gesture rides along with this batch. It
+    // goes first so a genuinely newer update in `incoming` still wins on
+    // version, which is the ordering reconcile applies either way.
+    const batch =
+      deferredRemote.current.size > 0
+        ? [...deferredRemote.current.values(), ...incoming]
+        : incoming;
+    deferredRemote.current.clear();
+
     // The canvas, not the ref, whenever the canvas can be asked.
     const base = liveRef.current?.() ?? sceneRef.current;
-    const { elements, changed } = reconcile(base, incoming, {
+    const { elements, changed, deferred } = reconcile(base, batch, {
       localHeldIds: heldRef.current?.(),
     });
+
+    /**
+     * Still held: keep it for the next pass rather than losing it.
+     *
+     * The sender has already crossed these off its own delta and will not offer
+     * them again, so dropping one here loses a peer's edit permanently. Keyed by
+     * id and resolved on version, because a long drag can outlast several
+     * updates to the same shape and only the newest is worth replaying.
+     */
+    for (const el of deferred) {
+      const held = deferredRemote.current.get(el.id);
+      if (!held || el.version > held.version) deferredRemote.current.set(el.id, el);
+    }
+
     if (changed.length === 0) return;
 
     sceneRef.current = elements;
@@ -443,10 +505,25 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     // onChange saw a changed fingerprint and rebroadcast the peer's own elements
     // at a bumped version. Traffic doubled and z-order flapped between tabs.
     lastFingerprint.current = sceneFingerprint(sceneRef.current);
-    // Remote elements are already accounted for as "sent": echoing them back to
-    // the peer that authored them would loop forever.
-    for (const el of incoming) sentVersions.current.set(el.id, el.version);
+    /**
+     * Remote elements are already accounted for as "sent": echoing them back to
+     * the peer that authored them would loop forever.
+     *
+     * Only the ones that were actually applied, though. This used to run over
+     * the whole incoming batch, which included the elements reconcile had just
+     * withheld for being mid-gesture, and marking those as delivered was the
+     * second half of losing them. The local scene still holds the user's own
+     * version, so the next delta compares that version against a number the
+     * peer supplied: if the peer's is the higher of the two, and after a few
+     * edits on their side it usually is, the user's finished drag matches as
+     * already-sent and never leaves this tab.
+     */
+    const withheld = new Set(deferred.map((el) => el.id));
+    for (const el of batch) {
+      if (!withheld.has(el.id)) sentVersions.current.set(el.id, el.version);
+    }
   }, [snapshots]);
+  applyRemoteRef.current = applyRemote;
 
   useEffect(() => {
     const channel = supabase.channel(boardChannel(boardId), {
@@ -623,9 +700,18 @@ export function useCollab(options: UseCollabOptions): CollabHandle {
     return () => {
       if (sceneTimer.current) clearTimeout(sceneTimer.current);
       if (cursorTimer.current) clearTimeout(cursorTimer.current);
-      // Best-effort final save. Cannot be awaited during teardown, but the
-      // writer election means whoever remains will persist anyway.
-      void snapshots.flush(sceneRef.current);
+      if (drainTimer.current) clearTimeout(drainTimer.current);
+      /**
+       * Best-effort final save, and only from the writer.
+       *
+       * The gate was on flush() but not here, which is backwards: this is the
+       * closing-a-tab path, and closing a tab is precisely how a peer that has
+       * been idle for an hour gets to overwrite the board with the stale scene
+       * it happens to be holding. Cannot be awaited during teardown, but with
+       * the gate in place the peer that skips it is by definition not the one
+       * responsible for persisting, and whoever is will persist anyway.
+       */
+      if (isWriterRef.current) void snapshots.flush(sceneRef.current);
       void supabase.removeChannel(channel);
       channelRef.current = null;
     };

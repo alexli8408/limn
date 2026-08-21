@@ -179,9 +179,22 @@ test("an element being dragged locally is not yanked away mid-gesture", () => {
   assert.equal(held.elements[0]?.payload, "local-drag");
   assert.deepEqual(held.changed, []);
 
+  // Withheld, not discarded. The sender has already crossed it off its own
+  // delta, so a caller that does not keep this loses the edit for good.
+  assert.deepEqual(
+    held.deferred.map((e) => e.id),
+    ["a"],
+    "a held element must be handed back so the caller can replay it",
+  );
+
   // Released, the same update applies normally.
   const free = reconcile(local, remote);
   assert.equal(free.elements[0]?.payload, "stale-echo");
+  assert.deepEqual(free.deferred, [], "nothing is withheld once the gesture ends");
+
+  // And replaying what was withheld is what actually delivers it.
+  const replayed = reconcile(local, held.deferred);
+  assert.equal(replayed.elements[0]?.payload, "stale-echo");
 });
 
 test("a tombstone for an unseen element is retained, not discarded", () => {
