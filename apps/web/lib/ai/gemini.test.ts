@@ -280,3 +280,57 @@ test("only a drawing keeps its groups", () => {
     [],
   );
 });
+
+/**
+ * Gemini accepts a narrow subset of OpenAPI, and it reports anything outside it
+ * as a bare HTTP 400 "Request contains an invalid argument" naming no field.
+ * There is no way to tell from the error which keyword it objected to.
+ *
+ * A maxItems added in good faith took Beautify and Describe down for a day,
+ * every call 400ing, and it was only found by running the live test. This walks
+ * the shipped schema and fails on any keyword that has not been confirmed
+ * against the real API, so the next one is caught offline instead.
+ *
+ * To add a keyword: send it live first, see the request succeed, then list it.
+ */
+const CONFIRMED_SCHEMA_KEYWORDS = new Set([
+  "type",
+  "description",
+  "enum",
+  "items",
+  "properties",
+  "required",
+  "propertyOrdering",
+]);
+
+function keywordsIn(node: unknown, found = new Set<string>()): Set<string> {
+  if (Array.isArray(node)) {
+    for (const child of node) keywordsIn(child, found);
+    return found;
+  }
+  if (node && typeof node === "object") {
+    for (const [key, value] of Object.entries(node)) {
+      // Keys under `properties` are field names the schema declares, not
+      // keywords, so they are not the thing being checked here.
+      if (key === "properties" && value && typeof value === "object") {
+        found.add(key);
+        for (const child of Object.values(value)) keywordsIn(child, found);
+        continue;
+      }
+      found.add(key);
+      keywordsIn(value, found);
+    }
+  }
+  return found;
+}
+
+test("the response schema uses only keywords Gemini has accepted", () => {
+  const used = keywordsIn(geminiDiagramSchema);
+  const unknown = [...used].filter((key) => !CONFIRMED_SCHEMA_KEYWORDS.has(key));
+  assert.deepEqual(
+    unknown,
+    [],
+    `unconfirmed schema keyword(s): ${unknown.join(", ")}. Gemini rejects the whole ` +
+      `request with an unhelpful 400 for these. Confirm against the live API before adding one.`,
+  );
+});

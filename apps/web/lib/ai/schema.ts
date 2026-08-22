@@ -225,13 +225,20 @@ export const geminiDiagramSchema = {
     },
     groups: {
       type: "array",
-      // Caps the decoder enforces, so an over-long answer never reaches zod,
-      // which throws on one rather than trimming it. Safe here and deliberately
-      // absent on nodes: a group the model had to cut short leaves those strokes
-      // where the author drew them, while a node list cut short still gets
-      // applied, and applying it tombstones every element the missing nodes came
-      // from. For structure, failing is the better half of the trade.
-      maxItems: "40",
+      /**
+       * No maxItems here, or anywhere else in this object.
+       *
+       * It reads like the obvious way to stop an over-long answer reaching zod,
+       * which throws on one rather than trimming it, and Gemini rejects the
+       * whole request for it: HTTP 400, "Request contains an invalid argument",
+       * naming nothing. Confirmed against the live API by stripping the three
+       * maxItems and nothing else, which made the same request succeed. As
+       * numbers rather than strings it still fails.
+       *
+       * This cost a day of Beautify and Describe being dead in production while
+       * every call 400d, so the cap belongs where it already is: the zod schema
+       * trims, and parseDiagram catches what it throws.
+       */
       // The only instructions the model reliably reads for this payload. Kept in
       // step with REFINE_SYSTEM on purpose: the response schema is read at decode
       // time and outranks the system prompt, so a sentence here that contradicts
@@ -243,7 +250,6 @@ export const geminiDiagramSchema = {
         properties: {
           ids: {
             type: "array",
-            maxItems: "64",
             items: { type: "string" },
             description:
               "Ids of the existing elements in this group, taken from the element list. At most 64.",
@@ -255,7 +261,6 @@ export const geminiDiagramSchema = {
           },
           ops: {
             type: "array",
-            maxItems: "6",
             items: { type: "string", enum: [...polishOps] },
             description:
               "The tidying that suits this group, at most 6. align-left/right/top/bottom snap its members to a shared edge, align-center-x/align-center-y to a shared centre line. distribute-x/distribute-y even out the gaps along one axis. equalize-size gives every member one bounding size. straighten turns a wobbly line or freehand stroke into a straight segment. regularize rounds a near-circle to a circle and squares up a near-square. match-style unifies stroke width, roughness and colour. Choose only what genuinely suits the group; an empty list is a valid answer, and forcing alignment on a deliberately loose sketch makes it worse.",

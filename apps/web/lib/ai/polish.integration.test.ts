@@ -101,4 +101,7 @@ test.skipIf(!hasKey)("groups a drawing and tidies it without losing a stroke", a
 
     console.log(`    tidied ${result.changed.length}/${elements.length} strokes`);
   }),
+  // A real call carrying a 900x640 PNG is seconds, not milliseconds, and the
+  // retry chain can take three of them before giving up.
+  120_000,
 );
