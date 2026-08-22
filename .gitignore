@@ -39,3 +39,4 @@ supabase/.temp/
 
 # Worktrees created by parallel agents
 .claude/worktrees/
+.demo-capture/
