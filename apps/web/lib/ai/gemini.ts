@@ -85,14 +85,20 @@ Only if kind is "drawing", fill in groups instead:
   one, and never repeat an id across two groups.
 - A stroke that is not part of anything stays ungrouped. That is a better answer
   than forcing it somewhere it does not belong.
-- ops say what tidying suits the group and nothing more. Align or centre members
-  that were meant to share an edge or a line, distribute ones meant to be evenly
-  spaced, equalize-size when they were meant to match, straighten a wobbly line,
-  regularize a near-circle or a near-square, match-style to unify stroke width,
-  roughness and colour.
-- Choosing no ops is a valid answer. A group can be worth naming and not worth
-  touching, and forcing alignment onto a deliberately loose sketch makes it
-  worse than it was.
+- ops say what this group was MEANT to look like, drawn steadily. You are not
+  deciding what is safe to touch. Every op is checked against each stroke before
+  it is applied and declined where it does not fit: a curve survives straighten,
+  a deliberate squiggle survives regularize, a group of one is never aligned. So
+  say what the thing is meant to be and let the check refuse what it must.
+- Be specific and be generous. The walls of a hand-drawn house were meant to be
+  straight and square: straighten and regularize. A hand-drawn sun was meant to
+  be a circle: regularize. Rays around it were meant to be straight and the same
+  length: straighten and equalize-size. A row of windows was meant to line up
+  and be evenly spaced: align-top and distribute-x. match-style on its own
+  changes almost nothing visible, so it is rarely the whole answer.
+- An empty ops list says the group is already exactly as it was meant to be.
+  That is rare in a hand drawing. Use it when the looseness is the point, a
+  scribble of hair or a texture, not merely because you are unsure.
 
 The author may ask for a change in style or mood. You cannot express style, only
 structure. Follow any instruction that affects structure, ignore the rest, and

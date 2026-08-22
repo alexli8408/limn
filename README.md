@@ -50,6 +50,12 @@ so nothing is replaced and nothing is lost.
 ![A wobbly hand-drawn house and sun, beside the same drawing with straight walls,
 a true circle and a level ground line](docs/beautify-before-after.png)
 
+That is the real output, and the grouping is the model's own: it split the
+strokes into the house body, the roof, the door, the sun, its rays and the
+ground line, and chose what tidying each one wanted. Reproduce it with
+`pnpm exec vitest run lib/ai/polish.integration.test.ts`, which needs a
+`GEMINI_API_KEY` and skips without one.
+
 ---
 
 ## Measured results

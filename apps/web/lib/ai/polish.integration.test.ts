@@ -87,6 +87,24 @@ test.skipIf(!hasKey)("groups a drawing and tidies it without losing a stroke", a
     assert.equal(result.elements.length, elements.length, "polish lost or invented a stroke");
     assert.ok(result.changed.length > 0, "the model grouped the drawing and nothing moved");
 
+    /**
+     * Most of a hand drawing should be tidied, not a token amount of it.
+     *
+     * The prompt used to hedge, telling the model that choosing no ops was a
+     * fine answer and that forcing tidying made things worse. It believed that
+     * and picked match-style for a wobbly house, which changes nothing anyone
+     * can see: 2 of 14 strokes moved and the walls stayed crooked. The feature
+     * worked and looked like it did not.
+     *
+     * Half is a floor, not a target. It fails the timid answer and passes any
+     * reasonable one.
+     */
+    assert.ok(
+      result.changed.length >= elements.length / 2,
+      `only ${result.changed.length} of ${elements.length} strokes were tidied, which is the ` +
+        `timid-ops regression: check the ops guidance in REFINE_SYSTEM and schema.ts agree`,
+    );
+
     // Whatever it touched has to be republishable, or the tidy is invisible to
     // everyone else on the board.
     const before = new Map(elements.map((el) => [String(el.id), Number(el.version)]));
